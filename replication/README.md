@@ -104,7 +104,7 @@ These cells stay blank, with the reason in the footnotes, until the missing code
 
 ### Observed in the released code, and the opt-in `freezeFix` variant
 
-`utils/modelstuff/helpers/freezeFunctionalLayers.m` calls `layers(1).setLearnRateFactor(...)` without assigning the result back. MATLAB layers are value objects, so in the DeepRNN branch nothing is frozen, and the whole pretrained source network is fine-tuned at full rate together with the new projection. The EEGNet branch does assign back, and the Transformer projections rebuild the graph from the pretrained network, so for them the call has no effect either way. The default runs keep this exactly as shipped.
+`utils/modelstuff/helpers/freezeFunctionalLayers.m` calls `layers(1).setLearnRateFactor(...)` without assigning the result back. MATLAB layers are value objects, so in the DeepRNN branch nothing is frozen, and the whole pretrained source network is fine-tuned at full rate together with the new projection. The EEGNet branch does assign back, so its 0.1 factors do apply. The Transformer projections rebuild the graph from the pretrained network, so the call has no effect there. The default runs keep this exactly as shipped.
 
 `'variant', 'freezeFix'` is an opt-in rerun in which the freezing actually happens:
 
