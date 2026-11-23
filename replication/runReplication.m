@@ -2,7 +2,6 @@ function manifest = runReplication(varargin)
 %RUNREPLICATION  Seeded, resumable driver for every experiment in the paper.
 %
 %   runReplication()                         % all experiments, source then target
-%   runReplication('useShims', true)         % also F3-F7, masking, channel selection
 %   runReplication('tables', {'table2'})     % only what Table 2 needs
 %   runReplication('dryRun', true)           % print the plan and what is missing
 %
@@ -10,7 +9,6 @@ function manifest = runReplication(varargin)
 %   tables      {}      restrict to the experiments these tables need
 %   datasets    {}      e.g. {'CWL'}
 %   typeNets    {}      e.g. {'DeepRNN'}
-%   useShims    false   put replication/shims first on the path (see README)
 %   seed        0       master seed, set before every experiment
 %   ncval       'auto'  'auto' = number of fold files found, or a number
 %   parTrain    false   parfor over folds (fold seeds stay = fold index)
@@ -33,7 +31,6 @@ p = inputParser;
 addParameter(p, 'tables',      {});
 addParameter(p, 'datasets',    {});
 addParameter(p, 'typeNets',    {});
-addParameter(p, 'useShims',    false);
 addParameter(p, 'seed',        0);
 addParameter(p, 'ncval',       'auto');
 addParameter(p, 'parTrain',    false);
@@ -56,13 +53,6 @@ oldDir = cd(projectLoc);
 restoreDir = onCleanup(@() cd(oldDir));
 addpath(genpath(fullfile(projectLoc, 'utils')));
 addpath(repDir);
-shimDir = fullfile(repDir, 'shims');
-if o.useShims
-    addpath(shimDir, '-begin');
-    fprintf('[replication] shims ON: %s is first on the path\n', shimDir);
-else
-    if contains(path, shimDir), rmpath(shimDir); end
-end
 
 preflight();
 
@@ -84,7 +74,7 @@ for g = 1:numel(grid)
         continue
     end
 
-    [ok, reason] = supportCheck(k, o.useShims);
+    [ok, reason] = supportCheck(k);
     if ~ok
         row.status = 'unsupported'; row.message = reason;
         manifest = logRow(manifest, manifestFile, row, g, numel(grid), o.dryRun);
@@ -217,7 +207,7 @@ row = struct( ...
     'datasetType', k.datasetType, 'ncats', k.ncats, 'typeNet', k.typeNet, ...
     'domain', k.domain, 'layerName', k.layerName, 'ncval', NaN, ...
     'masterSeed', o.seed, 'foldSeeds', 'rng(fold) via ensureReproducibility; rng(1) datastore shuffle', ...
-    'useShims', double(o.useShims), 'parTrain', double(o.parTrain), ...
+    'parTrain', double(o.parTrain), ...
     'resultFile', '', 'dataSha256', '', ...
     'gitCommit', sha, 'gitDirty', double(dirty), ...
     'matlab', env.matlab, 'gpu', env.gpu, 'host', env.host, ...

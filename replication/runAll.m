@@ -2,7 +2,6 @@ function runAll(varargin)
 %RUNALL  Whole replication in one call: train everything, then build tables.
 %
 %   runAll()                      % shipped code only
-%   runAll('useShims', true)      % also F3-F7, temporal masking, channel selection
 %   runAll('dryRun', true)        % plan + data/pretrained checks, no training
 %
 % Any option of runReplication is accepted. Steps:
