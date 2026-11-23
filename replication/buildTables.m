@@ -3,7 +3,7 @@ function out = buildTables(varargin)
 %
 %   buildTables()                        % all tables
 %   buildTables('tables', {'table4'})    % one table
-%   buildTables('variant', 'freezeFix')  % same tables from the variant runs -> results/tables_freezeFix/
+%   buildTables('variant', 'freezeIntended')  % same tables from the variant runs -> results/tables_freezeIntended/
 %
 % Inputs : replication/results/manifest.csv (written by runReplication)
 %          the cvalresults/*.mat files the manifest points to

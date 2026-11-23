@@ -7,7 +7,7 @@ function grid = experimentGrid(varargin)
 %   grid = experimentGrid('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
 %   grid = experimentGrid('ids', {'cwl_N2_source-domain_DeepRNN_deeprnn'})
 %
-% 'variant' (e.g. 'freezeFix') renames the experiments that variant affects
+% 'variant' (e.g. 'freezeIntended') renames the experiments that variant affects
 % to <id>__<variant>, so their results are kept apart; see variantInfo.m.
 %
 % Filters (all optional, combined with AND): tables, datasets, ncats,

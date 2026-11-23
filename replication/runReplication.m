@@ -25,9 +25,10 @@ function manifest = runReplication(varargin)
 %                       from the next unfinished fold (see "Per-fold saving")
 %   folds       []      with perFold: run only these folds, e.g. 3 or 4:6
 %   variant     ''      '' = released code unchanged (default)
-%                       'freezeFix' = really freeze the DeepRNN source LSTM
-%                       layers (see replication/variants/freezeFix); results
-%                       are stored and labelled separately (<id>__freezeFix)
+%                       'freezeIntended' = apply the DeepRNN learn-rate
+%                       factors freezeFunctionalLayers.m intends (0.1 / 0.2),
+%                       see replication/variants/freezeIntended; results are
+%                       stored and labelled separately (<id>__freezeIntended)
 %   parTrain    false   only with perFold=false: parfor over folds
 %   force       false   rerun experiments already marked done
 %   dryRun      false   check data / pretrained models only, train nothing

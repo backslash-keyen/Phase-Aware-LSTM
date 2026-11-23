@@ -17,7 +17,7 @@ if ~isfolder(v.dir)
 end
 v.suffix = ['__' v.name];
 switch v.name
-    case 'freezeFix'
+    case 'freezeIntended'
         % freezeFunctionalLayers is called only when a projection is put in
         % front of a pretrained source network
         v.affects = @(k) ~startsWith(lower(k.domain), 'source') && ...

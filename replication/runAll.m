@@ -7,7 +7,7 @@ function runAll(varargin)
 %   runAll('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
 %                                 % one dataset / classes / model / domain at a time
 %
-%   runAll('variant', 'freezeFix', 'layerNames', {'ffnn','lstm','gru'})
+%   runAll('variant', 'freezeIntended', 'layerNames', {'ffnn','lstm','gru'})
 %                                 % opt-in variant, stored and tabled separately
 %
 % Any option of runReplication is accepted. Steps:
