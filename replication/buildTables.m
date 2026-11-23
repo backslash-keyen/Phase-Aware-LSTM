@@ -3,6 +3,7 @@ function out = buildTables(varargin)
 %
 %   buildTables()                        % all tables
 %   buildTables('tables', {'table4'})    % one table
+%   buildTables('variant', 'freezeFix')  % same tables from the variant runs -> results/tables_freezeFix/
 %
 % Inputs : replication/results/manifest.csv (written by runReplication)
 %          the cvalresults/*.mat files the manifest points to
@@ -22,12 +23,18 @@ p = inputParser;
 addParameter(p, 'tables', {});
 addParameter(p, 'decimals', 2);
 addParameter(p, 'statsMetric', 'accTest');
+addParameter(p, 'variant', '');
 parse(p, varargin{:});
 o = p.Results;
 
 repDir     = fileparts(mfilename('fullpath'));
 projectLoc = fileparts(repDir);
-outDir     = fullfile(repDir, 'results', 'tables');
+v = variantInfo(o.variant);
+if isempty(v.name)
+    outDir = fullfile(repDir, 'results', 'tables');
+else
+    outDir = fullfile(repDir, 'results', ['tables_' v.name]);   % never overwrites the unchanged-code tables
+end
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 oldDir = cd(projectLoc); restoreDir = onCleanup(@() cd(oldDir));
 addpath(genpath(fullfile(projectLoc, 'utils')));
@@ -35,6 +42,7 @@ addpath(repDir);
 
 T = paperTables();
 if ~isempty(o.tables), T = T(ismember({T.id}, cellstr(o.tables))); end
+T = applyVariant(T, v);
 
 manifestFile = fullfile(repDir, 'results', 'manifest.csv');
 manifest = table();

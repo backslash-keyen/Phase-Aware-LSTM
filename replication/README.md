@@ -102,9 +102,22 @@ These cells stay blank, with the reason in the footnotes, until the missing code
 
 `perfold_dataset.m` can load `source-domain-2`, `target-domain-2` and `temporalmasking-1/2`, but `get_trainingOptions.m` and `define_layerArchitecture.m` accept only `source-domain` and `target-domain`, and nothing builds layer `baseTransfer` (common-channel selection). So every F3–F7 cell (Tables 4–6), every temporal-masking cell (Table 8) and every channel-selection cell (Tables 3, 5) is logged as `unsupported` and left blank. They fill in automatically once the original code supports them: rerun `runAll`.
 
-### Observed in the released code, deliberately not changed
+### Observed in the released code, and the opt-in `freezeFix` variant
 
-* `utils/modelstuff/helpers/freezeFunctionalLayers.m` calls `layers(1).setLearnRateFactor(...)` without assigning the result back. MATLAB layers are value objects, so for DeepRNN the intended 0.1 / 0.2 learn-rate factors on the LSTM layers are never applied, and those layers train at the full rate. The EEGNet and Transformer branches do assign back. Kept as shipped, because the replication runs the released code unchanged. It may explain part of any gap to the paper's projection results.
+`utils/modelstuff/helpers/freezeFunctionalLayers.m` calls `layers(1).setLearnRateFactor(...)` without assigning the result back. MATLAB layers are value objects, so in the DeepRNN branch nothing is frozen, and the whole pretrained source network is fine-tuned at full rate together with the new projection. The EEGNet branch does assign back, and the Transformer projections rebuild the graph from the pretrained network, so for them the call has no effect either way. The default runs keep this exactly as shipped.
+
+`'variant', 'freezeFix'` is an opt-in rerun in which the freezing actually happens:
+
+* `replication/variants/freezeFix/freezeFunctionalLayers.m` is put first on the path for that run only. The original file is not touched.
+* For DeepRNN, every recurrent layer of the pretrained source network (`lstm_1`, `lstm_2`) gets learn-rate factor 0 on all its weights and biases, and the result is assigned back. Everything else trains normally: the new projection layer, batch norm, and the fully connected classifier. EEGNet and Transformer call the original function.
+* The variant applies only to projection runs (`ffnn`, `lstm`, `gru`, `phase-lstm`). Its experiments are named `<id>__freezeFix`, with their own fold files (`cvalresults/.../folds/<id>__freezeFix/`), result files and summary CSV (`cvalresults/<ds>/<typeNet>/variants/freezeFix/`), and tables (`results/tables_freezeFix/`). Source runs and no-transfer runs are shared with the default, because the variant doesn't touch them.
+
+```matlab
+% unchanged code (default)
+runAll('datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain','layerNames',{'ffnn','lstm','gru'})
+% same runs with real freezing, stored separately
+runAll('datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain','layerNames',{'ffnn','lstm','gru'}, 'variant','freezeFix')
+```
 
 ### Other assumptions, flagged in the table footnotes
 

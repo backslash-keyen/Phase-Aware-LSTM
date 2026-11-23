@@ -24,6 +24,10 @@ function manifest = runReplication(varargin)
 %   perFold     true    save every fold as soon as it finishes and resume
 %                       from the next unfinished fold (see "Per-fold saving")
 %   folds       []      with perFold: run only these folds, e.g. 3 or 4:6
+%   variant     ''      '' = released code unchanged (default)
+%                       'freezeFix' = really freeze the DeepRNN source LSTM
+%                       layers (see replication/variants/freezeFix); results
+%                       are stored and labelled separately (<id>__freezeFix)
 %   parTrain    false   only with perFold=false: parfor over folds
 %   force       false   rerun experiments already marked done
 %   dryRun      false   check data / pretrained models only, train nothing
@@ -66,12 +70,17 @@ addParameter(p, 'ncval',       'auto');
 addParameter(p, 'parTrain',    false);
 addParameter(p, 'perFold',     true);
 addParameter(p, 'folds',       []);
+addParameter(p, 'variant',     '');
 addParameter(p, 'force',       false);
 addParameter(p, 'dryRun',      false);
 addParameter(p, 'stopOnError', false);
 addParameter(p, 'hashData',    true);
 parse(p, varargin{:});
 o = p.Results;
+v = variantInfo(o.variant);
+if ~isempty(v.name) && ~o.perFold
+    error('replication:variantPerFold', 'Variants run only with ''perFold'', true (results are stored separately).');
+end
 if o.perFold && o.parTrain
     error('replication:perFoldParTrain', 'perFold runs folds one at a time; use parTrain only with ''perFold'', false.');
 end
@@ -89,10 +98,24 @@ restoreDir = onCleanup(@() cd(oldDir));
 addpath(genpath(fullfile(projectLoc, 'utils')));
 addpath(repDir);
 
+% Variant folders shadow original functions: only the requested one may be on the path
+vroot = fullfile(repDir, 'variants');
+for d = dir(vroot)'
+    if d.isdir && ~startsWith(d.name, '.') && contains(path, fullfile(vroot, d.name))
+        rmpath(fullfile(vroot, d.name));
+    end
+end
+if ~isempty(v.name)
+    addpath(v.dir, '-begin');
+    restorePath = onCleanup(@() rmpath(v.dir));
+    fprintf('[replication] VARIANT %s: %s is first on the path\n', v.name, v.dir);
+end
+
 preflight();
 
 grid = experimentGrid('tables', o.tables, 'datasets', o.datasets, 'typeNets', o.typeNets, ...
-                      'ncats', o.ncats, 'domains', o.domains, 'layerNames', o.layerNames, 'ids', o.ids);
+                      'ncats', o.ncats, 'domains', o.domains, 'layerNames', o.layerNames, 'ids', o.ids, ...
+                      'variant', o.variant);
 if isempty(grid)
     fprintf('[replication] no experiment matches the filters.\n');
     manifest = readManifest(manifestFile);
@@ -222,6 +245,16 @@ for g = 1:numel(grid)
                 continue
             end
             [trainedModels, evals] = loadFolds(foldDir, ncval);
+            if v.affects(k)
+                % variant results never go next to the unchanged-code results
+                row.resultFile = saveVariantResults(config, trainedModels, evals, v, outDir);
+                row.status = 'done';
+                row.message = ['variant ' v.name];
+                clear trainedModels evals
+                row.finishedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+                manifest = logRow(manifest, manifestFile, row, g, numel(grid), false);
+                continue
+            end
             kFold_saveResults(config, trainedModels, evals);   % original writer
             clear trainedModels evals
         else
@@ -287,6 +320,29 @@ for i = 1:config.ncval
     nSaved = nSaved + foldIsSaved(foldFile(foldDir, i));
 end
 complete = nSaved == config.ncval;
+end
+
+function file = saveVariantResults(config, trainedModels, evals, v, outDir)
+% Same content as kFold_saveResults.m, in cvalresults/<ds>/<typeNet>/variants/<name>/
+vdir = fullfile(outDir, 'variants', v.name);
+if ~exist(vdir, 'dir'), mkdir(vdir); end
+timestamp = char(datetime('now', 'Format', 'yyMMdd_HHmm'));
+file = fullfile(vdir, sprintf('cval_%s_%s_%d_%s%s_%s.mat', config.typeNet, config.domain, ...
+                config.ncats, config.layerName, v.suffix, timestamp));
+variant = v.name; %#ok<NASGU>
+save(file, 'trainedModels', 'evals', 'variant', '-v7.3');
+[mTr, mVa, mTe, mTime] = generateResultSummary(config, evals);   % original
+csv = fullfile(vdir, sprintf('projectionModule_%s.csv', v.name));
+if ~isfile(csv)
+    fid = fopen(csv, 'w');
+    fprintf(fid, 'Variant,TypeNet,Domain,NCats,LayerName,TrainAcc,ValAcc,TestAcc,TrainTime,Timestamp\n');
+    fclose(fid);
+end
+fid = fopen(csv, 'a');
+fprintf(fid, '%s,%s,%s,%d,%s,%.4f,%.4f,%.4f,%.2f,%s\n', v.name, config.typeNet, config.domain, ...
+        config.ncats, config.layerName, mTr, mVa, mTe, mTime, timestamp);
+fclose(fid);
+fprintf('[replication] variant results -> %s\n', file);
 end
 
 function f = foldFile(foldDir, i)

@@ -7,6 +7,9 @@ function grid = experimentGrid(varargin)
 %   grid = experimentGrid('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
 %   grid = experimentGrid('ids', {'cwl_N2_source-domain_DeepRNN_deeprnn'})
 %
+% 'variant' (e.g. 'freezeFix') renames the experiments that variant affects
+% to <id>__<variant>, so their results are kept apart; see variantInfo.m.
+%
 % Filters (all optional, combined with AND): tables, datasets, ncats,
 % typeNets, domains, layerNames, ids. Filtering never adds the source runs
 % a target run depends on; those are checked on disk at run time.
@@ -25,6 +28,7 @@ addParameter(p, 'ncats',    []);
 addParameter(p, 'domains',  {});
 addParameter(p, 'layerNames', {});
 addParameter(p, 'ids',      {});
+addParameter(p, 'variant',  '');
 parse(p, varargin{:});
 o = p.Results;
 
@@ -67,8 +71,13 @@ end
 if ~isempty(o.layerNames)
     grid = grid(ismember(lower({grid.layerName}), lower(cellstr(o.layerNames))));
 end
+v = variantInfo(o.variant);
+for g = 1:numel(grid)
+    grid(g).baseId = grid(g).id;
+    if v.affects(grid(g)), grid(g).id = [grid(g).id v.suffix]; end
+end
 if ~isempty(o.ids)
-    grid = grid(ismember({grid.id}, cellstr(o.ids)));
+    grid = grid(ismember({grid.id}, cellstr(o.ids)) | ismember({grid.baseId}, cellstr(o.ids)));
 end
 if isempty(grid), return; end
 
@@ -79,7 +88,7 @@ src2  = double(strcmpi({grid.domain}, 'source-domain-2'));     % plain source be
 grid = grid(order);
 
 for g = 1:numel(grid)
-    grid(g).usedBy = strjoin(usedBy(grid(g).id), '; ');
+    grid(g).usedBy = strjoin(usedBy(grid(g).baseId), '; ');
 end
 end
 
