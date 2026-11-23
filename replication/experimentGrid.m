@@ -4,6 +4,12 @@ function grid = experimentGrid(varargin)
 %   grid = experimentGrid()                         % everything, run order
 %   grid = experimentGrid('tables', {'table2','table4'})
 %   grid = experimentGrid('datasets', {'CWL'})
+%   grid = experimentGrid('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
+%   grid = experimentGrid('ids', {'cwl_N2_source-domain_DeepRNN_deeprnn'})
+%
+% Filters (all optional, combined with AND): tables, datasets, ncats,
+% typeNets, domains, layerNames, ids. Filtering never adds the source runs
+% a target run depends on; those are checked on disk at run time.
 %
 % The grid is derived from paperTables(): every table cell that points to
 % an experiment contributes that experiment, and every target experiment
@@ -15,6 +21,10 @@ p = inputParser;
 addParameter(p, 'tables',   {});
 addParameter(p, 'datasets', {});
 addParameter(p, 'typeNets', {});
+addParameter(p, 'ncats',    []);
+addParameter(p, 'domains',  {});
+addParameter(p, 'layerNames', {});
+addParameter(p, 'ids',      {});
 parse(p, varargin{:});
 o = p.Results;
 
@@ -48,6 +58,19 @@ end
 if ~isempty(o.typeNets)
     grid = grid(ismember(lower({grid.typeNet}), lower(cellstr(o.typeNets))));
 end
+if ~isempty(o.ncats)
+    grid = grid(ismember([grid.ncats], o.ncats));
+end
+if ~isempty(o.domains)
+    grid = grid(ismember(lower({grid.domain}), lower(cellstr(o.domains))));
+end
+if ~isempty(o.layerNames)
+    grid = grid(ismember(lower({grid.layerName}), lower(cellstr(o.layerNames))));
+end
+if ~isempty(o.ids)
+    grid = grid(ismember({grid.id}, cellstr(o.ids)));
+end
+if isempty(grid), return; end
 
 % Run order: stage (source first), then dataset, classes, network, domain, layer
 stage = double(~startsWith(lower({grid.domain}), 'source'));   % 0 = source, 1 = target

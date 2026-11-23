@@ -16,6 +16,9 @@ From MATLAB (R2022b+ with Deep Learning Toolbox), with the full datasets under `
 addpath replication
 runAll('dryRun', true)       % plan: what will run, what is missing, nothing trained
 runAll()                     % train everything the released code supports, then build tables
+runAll('listOnly', true)     % every experiment id, in run order
+runAll('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
+                             % one dataset / classes / model / domain at a time
 buildTables()                % rebuild tables only, from results already on disk
 ```
 
@@ -23,7 +26,7 @@ Or open `replicatePaper.m` at the repo root, set its two options and press Run.
 
 `runAll` is resumable. Each finished experiment is logged in `results/manifest.csv`, and a rerun skips it (`'force', true` reruns). Source-domain experiments always run before target-domain ones, because target runs load the models the source runs save to `pretrainedModels/`. A target run whose source models are missing is logged as `blocked` and not started.
 
-Useful options of `runReplication` / `runAll`: `tables` (only what some tables need, e.g. `{'table2','table4'}`), `datasets`, `typeNets`, `seed`, `ncval` (`'auto'` counts the fold files), `parTrain`, `stopOnError`.
+Filters (combined with AND): `datasets`, `ncats`, `typeNets`, `domains`, `layerNames`, `ids`. A run on one slice still writes to the same manifest, so slices add up, and `buildTables()` fills whatever is done so far. A missing data folder (e.g. one renamed on purpose) is logged as `missing-data` and skipped. Other options of `runReplication` / `runAll`: `tables` (only what some tables need, e.g. `{'table2','table4'}`), `seed`, `ncval` (`'auto'` counts the fold files), `parTrain`, `stopOnError`.
 
 ## Seeding and provenance
 

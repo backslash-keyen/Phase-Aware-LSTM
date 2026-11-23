@@ -4,11 +4,19 @@ function manifest = runReplication(varargin)
 %   runReplication()                         % all experiments, source then target
 %   runReplication('tables', {'table2'})     % only what Table 2 needs
 %   runReplication('dryRun', true)           % print the plan and what is missing
+%   runReplication('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
+%                                            % one dataset / classes / model / domain at a time
+%   runReplication('listOnly', true)         % print experiment ids and exit
 %
 % Name-value options
 %   tables      {}      restrict to the experiments these tables need
 %   datasets    {}      e.g. {'CWL'}
 %   typeNets    {}      e.g. {'DeepRNN'}
+%   ncats       []      e.g. 2
+%   domains     {}      e.g. 'source-domain' or 'target-domain'
+%   layerNames  {}      e.g. {'phase-lstm','lstm'}
+%   ids         {}      exact experiment ids (see 'listOnly')
+%   listOnly    false   print the selected experiment ids and exit
 %   seed        0       master seed, set before every experiment
 %   ncval       'auto'  'auto' = number of fold files found, or a number
 %   parTrain    false   parfor over folds (fold seeds stay = fold index)
@@ -31,6 +39,11 @@ p = inputParser;
 addParameter(p, 'tables',      {});
 addParameter(p, 'datasets',    {});
 addParameter(p, 'typeNets',    {});
+addParameter(p, 'ncats',       []);
+addParameter(p, 'domains',     {});
+addParameter(p, 'layerNames',  {});
+addParameter(p, 'ids',         {});
+addParameter(p, 'listOnly',    false);
 addParameter(p, 'seed',        0);
 addParameter(p, 'ncval',       'auto');
 addParameter(p, 'parTrain',    false);
@@ -56,7 +69,22 @@ addpath(repDir);
 
 preflight();
 
-grid = experimentGrid('tables', o.tables, 'datasets', o.datasets, 'typeNets', o.typeNets);
+grid = experimentGrid('tables', o.tables, 'datasets', o.datasets, 'typeNets', o.typeNets, ...
+                      'ncats', o.ncats, 'domains', o.domains, 'layerNames', o.layerNames, 'ids', o.ids);
+if isempty(grid)
+    fprintf('[replication] no experiment matches the filters.\n');
+    manifest = readManifest(manifestFile);
+    return
+end
+if o.listOnly
+    fprintf('[replication] %d experiments selected (run order):\n', numel(grid));
+    for g = 1:numel(grid)
+        [ok, why] = supportCheck(grid(g));
+        fprintf('  %3d  %-55s %s\n', g, grid(g).id, ternary(ok, '', ['(unsupported: ' why ')']));
+    end
+    manifest = readManifest(manifestFile);
+    return
+end
 manifest = readManifest(manifestFile);
 [sha, dirty] = gitCommit(projectLoc);
 env = environmentInfo();
@@ -81,10 +109,20 @@ for g = 1:numel(grid)
         continue
     end
 
-    files = foldFiles(projectLoc, k);
+    try
+        files = foldFiles(projectLoc, k);
+    catch ME
+        files = [];
+        row.message = ME.message;
+    end
     if isempty(files)
         row.status  = 'missing-data';
-        row.message = sprintf('no fold files in %s', dataFolder(projectLoc, k.datasetType, k.ncats, k.domain));
+        folder = dataFolder(projectLoc, k.datasetType, k.ncats, k.domain);
+        if ~isfolder(folder)
+            row.message = sprintf('data folder not found: %s', folder);
+        elseif isempty(row.message)
+            row.message = sprintf('no fold files in %s', folder);
+        end
         manifest = logRow(manifest, manifestFile, row, g, numel(grid), o.dryRun);
         continue
     end
@@ -115,7 +153,11 @@ for g = 1:numel(grid)
     end
 
     if o.hashData
-        row.dataSha256 = strjoin(arrayfun(@(f) fileSha256(f.path), files(1:ncval), 'UniformOutput', false), ' ');
+        try
+            row.dataSha256 = strjoin(arrayfun(@(f) fileSha256(f.path), files(1:ncval), 'UniformOutput', false), ' ');
+        catch ME
+            row.dataSha256 = ['hash failed: ' ME.message];
+        end
     end
 
     if o.dryRun
