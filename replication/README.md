@@ -28,6 +28,19 @@ Or open `replicatePaper.m` at the repo root, set its two options and press Run.
 
 Filters (combined with AND): `datasets`, `ncats`, `typeNets`, `domains`, `layerNames`, `ids`. A run on one slice still writes to the same manifest, so slices add up, and `buildTables()` fills whatever is done so far. A missing data folder (e.g. one renamed on purpose) is logged as `missing-data` and skipped. Other options of `runReplication` / `runAll`: `tables` (only what some tables need, e.g. `{'table2','table4'}`), `seed`, `ncval` (`'auto'` counts the fold files), `parTrain`, `stopOnError`.
 
+## Per-fold saving and resume
+
+By default (`'perFold', true`) the driver does what `kFold_crossValidation.m` does, one fold at a time. It calls the original `perfold_training(config, i)` and saves that fold's trained model and evaluation as soon as it returns:
+
+```
+cvalresults/<dataset>/<typeNet>/folds/<experiment id>/fold<i>.mat   (model, evaluation, foldMeta)
+replication/results/fold_log.csv                                    (one line per finished fold)
+```
+
+Each file is written to a temporary name and then renamed, so an interruption never leaves a half-written fold. Rerunning the same command skips saved folds and continues with the next unfinished one. The manifest shows the experiment as `partial` until all folds are saved. Then the original `kFold_saveResults(config, trainedModels, evals)` writes the usual `cval_*.mat` and summary CSV, the same output as an uninterrupted `kFold_crossValidation` run. `'folds', 3` (or `4:6`) runs only those folds. `'perFold', false` calls `kFold_crossValidation` exactly as shipped.
+
+Seeds are unchanged: `perfold_training` still calls `ensureReproducibility(i)` before training, and the master seed is reset before every fold, so a resumed fold starts from the same state as a fresh one. Source models were already saved per fold by the original `perfold_saveModel.m`.
+
 ## Seeding and provenance
 
 * The released code already seeds each fold: `perfold_training.m` calls `ensureReproducibility(i)` right before `trainNetwork` (`rng(i)`, `gpurng(i)`, deterministic GPU algorithms), and `makeDatastore.m` calls `rng(1)` before shuffling. So the fold seed is the fold index, as in the paper's runs.
@@ -88,6 +101,10 @@ These cells stay blank, with the reason in the footnotes, until the missing code
 ### Domains the released code rejects
 
 `perfold_dataset.m` can load `source-domain-2`, `target-domain-2` and `temporalmasking-1/2`, but `get_trainingOptions.m` and `define_layerArchitecture.m` accept only `source-domain` and `target-domain`, and nothing builds layer `baseTransfer` (common-channel selection). So every F3–F7 cell (Tables 4–6), every temporal-masking cell (Table 8) and every channel-selection cell (Tables 3, 5) is logged as `unsupported` and left blank. They fill in automatically once the original code supports them: rerun `runAll`.
+
+### Observed in the released code, deliberately not changed
+
+* `utils/modelstuff/helpers/freezeFunctionalLayers.m` calls `layers(1).setLearnRateFactor(...)` without assigning the result back. MATLAB layers are value objects, so for DeepRNN the intended 0.1 / 0.2 learn-rate factors on the LSTM layers are never applied, and those layers train at the full rate. The EEGNet and Transformer branches do assign back. Kept as shipped, because the replication runs the released code unchanged. It may explain part of any gap to the paper's projection results.
 
 ### Other assumptions, flagged in the table footnotes
 

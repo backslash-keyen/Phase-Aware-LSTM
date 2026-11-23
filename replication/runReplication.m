@@ -7,6 +7,8 @@ function manifest = runReplication(varargin)
 %   runReplication('datasets','CWL', 'ncats',2, 'typeNets','DeepRNN', 'domains','source-domain')
 %                                            % one dataset / classes / model / domain at a time
 %   runReplication('listOnly', true)         % print experiment ids and exit
+%   runReplication('ids', {'cwl_N2_target-domain_DeepRNN_phase-lstm'}, 'folds', 3)
+%                                            % one fold of one experiment
 %
 % Name-value options
 %   tables      {}      restrict to the experiments these tables need
@@ -19,7 +21,10 @@ function manifest = runReplication(varargin)
 %   listOnly    false   print the selected experiment ids and exit
 %   seed        0       master seed, set before every experiment
 %   ncval       'auto'  'auto' = number of fold files found, or a number
-%   parTrain    false   parfor over folds (fold seeds stay = fold index)
+%   perFold     true    save every fold as soon as it finishes and resume
+%                       from the next unfinished fold (see "Per-fold saving")
+%   folds       []      with perFold: run only these folds, e.g. 3 or 4:6
+%   parTrain    false   only with perFold=false: parfor over folds
 %   force       false   rerun experiments already marked done
 %   dryRun      false   check data / pretrained models only, train nothing
 %   stopOnError false   stop at the first failed experiment
@@ -30,6 +35,18 @@ function manifest = runReplication(varargin)
 % before shuffling. This driver adds a master seed before each experiment
 % so nothing that runs before the fold seed depends on leftover RNG state,
 % and records every seed in the manifest.
+%
+% Per-fold saving. With perFold=true (default) the driver does what
+% kFold_crossValidation.m does, one fold at a time: it calls the original
+% perfold_training(config, i) for each fold, and saves that fold's model and
+% evaluation to cvalresults/<dataset>/<typeNet>/folds/<experiment id>/fold<i>.mat
+% the moment it returns. A rerun skips folds already saved. Once every fold
+% is saved, the original kFold_saveResults(config, trainedModels, evals)
+% writes the usual cval_*.mat and summary CSV, exactly as an uninterrupted
+% kFold_crossValidation run would. No original file is changed. Fold seeds
+% are unchanged: perfold_training still calls ensureReproducibility(i).
+% Source models were already saved per fold by the original code
+% (perfold_saveModel.m, pretrainedModels/).
 %
 % Output: replication/results/manifest.csv, one row per experiment with
 % status, config, seeds, data hashes, MATLAB/GPU info, git commit and the
@@ -47,12 +64,17 @@ addParameter(p, 'listOnly',    false);
 addParameter(p, 'seed',        0);
 addParameter(p, 'ncval',       'auto');
 addParameter(p, 'parTrain',    false);
+addParameter(p, 'perFold',     true);
+addParameter(p, 'folds',       []);
 addParameter(p, 'force',       false);
 addParameter(p, 'dryRun',      false);
 addParameter(p, 'stopOnError', false);
 addParameter(p, 'hashData',    true);
 parse(p, varargin{:});
 o = p.Results;
+if o.perFold && o.parTrain
+    error('replication:perFoldParTrain', 'perFold runs folds one at a time; use parTrain only with ''perFold'', false.');
+end
 
 repDir     = fileparts(mfilename('fullpath'));
 projectLoc = fileparts(repDir);
@@ -162,6 +184,12 @@ for g = 1:numel(grid)
 
     if o.dryRun
         if isempty(row.status), row.status = 'ready'; end
+        fd = fullfile(projectLoc, 'cvalresults', lower(k.datasetType), k.typeNet, 'folds', k.id);
+        nSaved = 0;
+        for i = 1:ncval, nSaved = nSaved + foldIsSaved(foldFile(fd, i)); end
+        if nSaved > 0
+            row.message = strtrim(sprintf('%s %d/%d folds already saved', row.message, nSaved, ncval));
+        end
         manifest = logRow(manifest, manifestFile, row, g, numel(grid), true);
         continue
     end
@@ -183,7 +211,22 @@ for g = 1:numel(grid)
     row.startedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
     fprintf('[%3d/%d] run              %s (ncval=%d)\n', g, numel(grid), k.id, ncval);
     try
-        kFold_crossValidation(config);
+        if o.perFold
+            foldDir = fullfile(outDir, 'folds', k.id);
+            [complete, nSaved] = runFoldsResumable(config, k, o, foldDir, resultsDir, sha);
+            if ~complete
+                row.status  = 'partial';
+                row.message = sprintf('%d of %d folds saved in %s; rerun to continue', nSaved, ncval, foldDir);
+                row.finishedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+                manifest = logRow(manifest, manifestFile, row, g, numel(grid), false);
+                continue
+            end
+            [trainedModels, evals] = loadFolds(foldDir, ncval);
+            kFold_saveResults(config, trainedModels, evals);   % original writer
+            clear trainedModels evals
+        else
+            kFold_crossValidation(config);
+        end
         after = listResults(outDir);
         newFiles = setdiff(after, before);
         pattern = sprintf('cval_%s_%s_%d_%s_', config.typeNet, config.domain, config.ncats, config.layerName);
@@ -213,6 +256,77 @@ summarize(manifest, grid);
 end
 
 % =====================================================================
+function [complete, nSaved] = runFoldsResumable(config, k, o, foldDir, resultsDir, sha)
+% Run the folds that are not saved yet, saving each one as it finishes.
+if ~exist(foldDir, 'dir'), mkdir(foldDir); end
+todo = 1:config.ncval;
+if ~isempty(o.folds), todo = intersect(todo, o.folds); end
+for i = todo
+    f = foldFile(foldDir, i);
+    if ~o.force && foldIsSaved(f)
+        fprintf('        fold %2d  saved earlier, skipping\n', i);
+        continue
+    end
+    setGlobalSeed(o.seed);                       % same pre-fold RNG state on fresh and resumed runs
+    t0 = tic;
+    startedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+    [model, evaluation] = perfold_training(config, i);   % original: seeds rng(i) before training
+    foldMeta = struct('experimentId', k.id, 'fold', i, 'masterSeed', o.seed, ...
+        'foldSeed', sprintf('rng(%d) via ensureReproducibility', i), 'gitCommit', sha, ...
+        'startedAt', startedAt, 'finishedAt', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
+        'matlab', version);
+    tmp = [f '.partial.mat'];
+    save(tmp, 'model', 'evaluation', 'foldMeta', '-v7.3');
+    movefile(tmp, f, 'f');                       % never leave a half-written fold file
+    logFold(resultsDir, k.id, i, toc(t0), evaluation, f);
+    fprintf('        fold %2d  saved  test acc %.2f%%  (%s)\n', i, 100 * evaluation.accuracyTest, f);
+    clear model evaluation
+end
+nSaved = 0;
+for i = 1:config.ncval
+    nSaved = nSaved + foldIsSaved(foldFile(foldDir, i));
+end
+complete = nSaved == config.ncval;
+end
+
+function f = foldFile(foldDir, i)
+f = fullfile(foldDir, sprintf('fold%d.mat', i));
+end
+
+function ok = foldIsSaved(f)
+ok = false;
+if ~isfile(f), return; end
+try
+    w = whos('-file', f);
+    ok = all(ismember({'model','evaluation'}, {w.name}));
+catch
+    ok = false;
+end
+end
+
+function [trainedModels, evals] = loadFolds(foldDir, ncval)
+trainedModels = cell(1, ncval);
+evals         = cell(1, ncval);
+for i = 1:ncval
+    S = load(foldFile(foldDir, i), 'model', 'evaluation');
+    trainedModels{i} = S.model;
+    evals{i}         = S.evaluation;
+end
+end
+
+function logFold(resultsDir, id, fold, seconds, ev, file)
+f = fullfile(resultsDir, 'fold_log.csv');
+newFile = ~isfile(f);
+fid = fopen(f, 'a');
+c = onCleanup(@() fclose(fid));
+if newFile
+    fprintf(fid, 'id,fold,seconds,accTrain,accVal,accTest,file,finishedAt\n');
+end
+fprintf(fid, '%s,%d,%.1f,%.6f,%.6f,%.6f,%s,%s\n', id, fold, seconds, ...
+    ev.accuracyTrain, ev.accuracyVal, ev.accuracyTest, strrep(file, ',', ';'), ...
+    char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')));
+end
+
 function preflight()
 if isempty(which('trainNetwork'))
     error('replication:noDLT', 'Deep Learning Toolbox is required.');
