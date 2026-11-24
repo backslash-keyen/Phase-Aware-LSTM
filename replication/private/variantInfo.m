@@ -26,20 +26,23 @@ function v = variantInfo(names, sourceModelRoot)
 %                           to the original up to float rounding)
 %   backwardPhaseLSTM path  speed only: phaseAwareLSTMBackward (version 4,
 %                           version-3 forward + hand-written backward pass)
-%   The three phase-LSTM speed variants replace the same layer, so at most
-%   one of them can be used at a time.
+%   fusedPhaseLSTM  path    speed only: phaseAwareLSTMFused (version 5,
+%                           version 4 with each time step fused into one GPU
+%                           kernel, forward and backward; CPU = version 4)
+%   The phase-LSTM speed variants replace the same layer, so at most one of
+%   them can be used at a time.
 
 if nargin < 1 || isempty(names), names = {}; end
 if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
 names = cellstr(names);
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM'};
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'};
+speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) > 1
     error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
 end
@@ -69,7 +72,7 @@ for i = 1:numel(names)
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
-        case {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'}
+        case {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM'}
             v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
     end

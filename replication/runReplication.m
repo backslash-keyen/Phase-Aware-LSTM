@@ -43,7 +43,9 @@ function manifest = runReplication(varargin)
 %                       stacked per-step arithmetic (<id>__fastestPhaseLSTM)
 %                       'backwardPhaseLSTM' = speed only, version 4: version-3
 %                       forward + hand-written backward (<id>__backwardPhaseLSTM)
-%                       At most one of the three phase-LSTM speed variants.
+%                       'fusedPhaseLSTM' = speed only, version 5: version 4 with
+%                       one fused GPU kernel per time step (<id>__fusedPhaseLSTM)
+%                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
 %                       layout as pretrainedModels/ (cwl\cwl1\DeepRNN\...)

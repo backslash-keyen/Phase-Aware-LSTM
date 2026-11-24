@@ -12,6 +12,10 @@ function report = checkPhaseLSTMVersions(varargin)
 %   2 fast       variants/fastPhaseLSTM                  should be bit-identical
 %   3 fastest    variants/fastestPhaseLSTM               same model, float rounding
 %   4 backward   variants/backwardPhaseLSTM              v3 forward + hand-written backward
+%   5 fused      variants/fusedPhaseLSTM                 v4 with one fused GPU kernel per step
+%
+% 'profile', true also runs the MATLAB profiler on one forward+backward of
+% the original layer and prints the 15 most expensive functions.
 %
 % Each layer sits in a dlnetwork after a sequenceInputLayer, as in training,
 % so version 4's backward() is the one dlgradient uses. All versions get the
@@ -29,20 +33,21 @@ addParameter(p, 'C', 2);        % target channels (Fp1, Fz)
 addParameter(p, 'reps', 3);
 addParameter(p, 'env', 'auto'); % 'auto' | 'gpu' | 'cpu'
 addParameter(p, 'seed', 0);
-addParameter(p, 'versions', 1:4);
+addParameter(p, 'versions', 1:5);
+addParameter(p, 'profile', false);
 parse(p, varargin{:}); o = p.Results;
 
 repDir  = fileparts(mfilename('fullpath'));
 rootDir = fileparts(repDir);
 oldPath = path; restorePath = onCleanup(@() path(oldPath)); %#ok<NASGU>
 addpath(genpath(fullfile(rootDir, 'utils')));
-for v = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'}
+for v = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM'}
     addpath(fullfile(repDir, 'variants', v{1}));
 end
 
 useGPU = strcmp(o.env, 'gpu') || (strcmp(o.env, 'auto') && canUseGPU);
-names  = {'original','fast','fastest','backward'};
-make   = {@phaseAwareLSTM, @phaseAwareLSTMFast, @phaseAwareLSTMFastest, @phaseAwareLSTMBackward};
+names  = {'original','fast','fastest','backward','fused'};
+make   = {@phaseAwareLSTM, @phaseAwareLSTMFast, @phaseAwareLSTMFastest, @phaseAwareLSTMBackward, @phaseAwareLSTMFused};
 vers   = unique([1, o.versions(:)']);        % the original is always the reference
 
 rng(o.seed, 'twister');
@@ -71,6 +76,13 @@ for k = vers
         if useGPU, wait(gpuDevice); end
         ts(r) = toc;
     end
+    if o.profile && k == 1
+        profile('on');
+        dlfeval(@lossAndGrads, net, X, w);
+        if useGPU, wait(gpuDevice); end
+        profile('off');
+        showProfile(profile('info'), 15);
+    end
     vals = flatten(out);
     res(end+1).version = k; %#ok<AGROW>
     res(end).name    = names{k};
@@ -97,7 +109,7 @@ for k = 1:numel(res)
     fprintf('%-3d %-10s %9.3f %7.1fx %13.2e %10d\n', res(k).version, res(k).name, ...
             res(k).seconds, res(k).speedup, res(k).maxRelDiff, same);
 end
-fprintf(['\nExpected: fast identical = 1; fastest and backward max rel diff around 1e-6 ' ...
+fprintf(['\nExpected: fast identical = 1; fastest, backward and fused max rel diff around 1e-6 ' ...
          'or below (single precision).\nPer-output differences: report(k).detail\n\n']);
 report = rmfield(res, 'vals');
 end
@@ -117,6 +129,17 @@ st = S.Value;                       % hiddenMagnitude, hiddenPhase, memoryReal, 
 gv = gL.Value;                      % W1 W2 U Q b1 b2
 v = [{Y}, st(:)', gv(:)', {stripdims(gX)}];
 v = cellfun(@(a) gather(double(extractdata(dlarray(a)))), v, 'UniformOutput', false);
+end
+
+function showProfile(info, n)
+ft = info.FunctionTable;
+[~, order] = sort([ft.TotalTime], 'descend');
+fprintf('\nProfiler, original layer, one forward+backward (top %d by total time):\n', n);
+fprintf('%10s %10s %8s  %s\n', 'total s', 'self s', 'calls', 'function');
+for i = order(1:min(n, numel(order)))
+    fprintf('%10.3f %10.3f %8d  %s\n', ft(i).TotalTime, ft(i).TotalTime - sum([ft(i).Children.TotalTime]), ...
+            ft(i).NumCalls, ft(i).FunctionName);
+end
 end
 
 function s = ternary(c, a, b)
