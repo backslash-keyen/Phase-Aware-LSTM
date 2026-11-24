@@ -37,6 +37,7 @@ addParameter(p, 'env', 'auto'); % 'auto' | 'gpu' | 'cpu'
 addParameter(p, 'seed', 0);
 addParameter(p, 'versions', 1:5);
 addParameter(p, 'profile', false);
+addParameter(p, 'trainSmoke', true); % 2-iteration trainNetwork run per version (training path)
 addParameter(p, 'Tcheck', 20);  % steps used for the accuracy comparison
 parse(p, varargin{:}); o = p.Results;
 
@@ -141,6 +142,39 @@ fprintf(['\nRounding floor: the ORIGINAL in single vs double precision differs b
 fprintf(['Expected: fast identical@T = 1; every version''s diff@T=%d well below the rounding floor ' ...
          '(double precision).\nPer-output differences: report(k).detail\n\n'], o.Tcheck);
 report = rmfield(res, 'vals');
+if o.trainSmoke
+    smoke = smokeTrain(make, names, [res.version], o, useGPU);
+    [report.trainNetworkOK]  = smoke.ok;
+    [report.trainNetworkMsg] = smoke.msg;
+end
+end
+
+function smoke = smokeTrain(make, names, vers, o, useGPU)
+% trainNetwork uses a different code path from dlnetwork/dlgradient (the
+% legacy custom-layer strategy). Train each version for 2 iterations in a
+% tiny network to make sure it works there too.
+Ts = 50; N = 64;
+rng(o.seed + 1, 'twister');
+Xs = arrayfun(@(i) single(randn(o.C, Ts)), 1:N, 'UniformOutput', false)';
+Ys = categorical(randi(2, N, 1));
+opts = trainingOptions('adam', 'MaxEpochs', 1, 'MiniBatchSize', 32, 'Verbose', false, ...
+    'Plots', 'none', 'ExecutionEnvironment', ternary(useGPU, 'gpu', 'cpu'));
+smoke.ok = cell(1, numel(vers)); smoke.msg = cell(1, numel(vers));
+fprintf('trainNetwork smoke test (2 iterations, T=%d):\n', Ts);
+for i = 1:numel(vers)
+    k = vers(i);
+    layers = [sequenceInputLayer(o.C, 'MinLength', Ts, 'Name', 'input'); ...
+              make{k}(o.H, 'Name', 'phaseLSTM', 'OutputMode', 'sequence'); ...
+              lstmLayer(8, 'OutputMode', 'last'); fullyConnectedLayer(2); softmaxLayer; classificationLayer];
+    try
+        tic; trainNetwork(Xs, Ys, layers, opts); t = toc;
+        smoke.ok{i} = true; smoke.msg{i} = sprintf('ok (%.1f s)', t);
+    catch err
+        smoke.ok{i} = false; smoke.msg{i} = getReport(err, 'extended', 'hyperlinks', 'off');
+    end
+    fprintf('  %-10s %s\n', names{k}, smoke.msg{i});
+end
+fprintf('\n');
 end
 
 function net = makeNet(ctor, H, C, T, netRef, useGPU, precision)

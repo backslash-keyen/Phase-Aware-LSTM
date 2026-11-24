@@ -112,7 +112,7 @@ classdef phaseAwareLSTMFused < nnet.layer.Layer & nnet.layer.Formattable
                 for k = numel(out)+1:nargout
                     out{k} = zeros(H, size(Xd, 2), 'like', Xd);
                 end
-                varargout = out(1:nargout);
+                varargout = wrapGrads(out(1:nargout), X);
                 return
             end
             [C, B, T] = size(Xd, 1:3);
@@ -219,7 +219,7 @@ classdef phaseAwareLSTMFused < nnet.layer.Layer & nnet.layer.Formattable
             for k = numel(out)+1:nargout
                 out{k} = zeros(H, B, 'like', Gs);
             end
-            varargout = out(1:nargout);
+            varargout = wrapGrads(out(1:nargout), X);
         end
     end
 
@@ -311,6 +311,20 @@ end
 
 function v = raw(v)
 if isa(v, 'dlarray'), v = extractdata(v); end
+end
+
+function out = wrapGrads(out, X)
+% trainNetwork's legacy custom-layer path (CustomLayerLegacyStrategy) calls
+% extractdata on every output of backward(), so return dlarrays; dlnetwork
+% accepts them too. dLdX keeps the format of X.
+for k = 1:numel(out)
+    if isa(out{k}, 'dlarray'), continue; end
+    if k == 1 && isa(X, 'dlarray') && ~isempty(dims(X))
+        out{k} = dlarray(out{k}, dims(X));
+    else
+        out{k} = dlarray(out{k});
+    end
+end
 end
 
 function z = zerosIfEmpty(v, H, B, likeThis)
