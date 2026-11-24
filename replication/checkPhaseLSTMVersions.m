@@ -20,7 +20,7 @@ function report = checkPhaseLSTMVersions(varargin)
 % Each layer sits in a dlnetwork after a sequenceInputLayer, as in training,
 % so version 4's backward() is the one dlgradient uses. All versions get the
 % same weights and input. For every output (Y, the four final states) and
-% every gradient (W1 W2 U Q b1 b2 and the input) it reports the largest
+% every gradient (W1 W2 U Q b1 b2) it reports the largest
 % difference relative to the largest value, and it times one
 % forward+backward pass (one training iteration of this layer).
 %
@@ -56,7 +56,9 @@ netRef = dlnetwork([input; phaseAwareLSTM(o.H, 'Name', 'phaseLSTM', 'OutputMode'
 X = single(randn(o.C, o.B, o.T));
 w = reshape(sin(single(1:o.H*o.B*o.T)), o.H, o.B, o.T);
 if useGPU, X = gpuArray(X); w = gpuArray(w); end
-X = dlarray(X, 'CBT');
+% X stays a plain array and becomes a dlarray inside lossAndGrads, so it is
+% NOT traced: in training the projection layer's input is data, never a
+% variable being differentiated (tracing it breaks the original layer).
 
 res = struct('version', {}, 'name', {}, 'seconds', {}, 'speedup', {}, ...
              'maxRelDiff', {}, 'identical', {}, 'detail', {});
@@ -71,7 +73,7 @@ for k = vers
     ts = zeros(1, o.reps + 1);
     for r = 1:o.reps + 1                       % first call is warm-up
         tic;
-        out = cell(1, 4);
+        out = cell(1, 3);
         [out{:}] = dlfeval(@lossAndGrads, net, X, w);
         if useGPU, wait(gpuDevice); end
         ts(r) = toc;
@@ -94,7 +96,7 @@ ref = res(1);
 fprintf('\nphase-aware LSTM, %s, H=%d B=%d T=%d, forward+backward, median of %d\n', ...
         ternary(useGPU, 'GPU', 'CPU'), o.H, o.B, o.T, o.reps);
 fprintf('%-3s %-10s %9s %8s %13s %10s\n', 'v', 'name', 'seconds', 'speedup', 'max rel diff', 'identical');
-labels = {'Y','h','phase','memRe','memIm','dW1','dW2','dU','dQ','db1','db2','dX'};
+labels = {'Y','h','phase','memRe','memIm','dW1','dW2','dU','dQ','db1','db2'};
 for k = 1:numel(res)
     d = zeros(1, numel(labels)); same = true;
     for j = 1:numel(labels)
@@ -114,20 +116,20 @@ fprintf(['\nExpected: fast identical = 1; fastest, backward and fused max rel di
 report = rmfield(res, 'vals');
 end
 
-function [Y, S, gL, gX] = lossAndGrads(net, X, w)
-[Y, state] = forward(net, X);
+function [Y, S, gL] = lossAndGrads(net, Xraw, w)
+X = dlarray(Xraw, 'CBT');            % created here, so untraced (as in training)
+[Y, S] = forward(net, X);
 Y = stripdims(Y);
 loss = sum(Y .* w, 'all');
-[gL, gX] = dlgradient(loss, net.Learnables, X);
-S = state;
+gL = dlgradient(loss, net.Learnables);
 end
 
 function v = flatten(out)
-% {Y, state table, learnable-gradient table, dX} -> 12 plain arrays
-[Y, S, gL, gX] = out{:};
+% {Y, state table, learnable-gradient table} -> 11 plain arrays
+[Y, S, gL] = out{:};
 st = S.Value;                       % hiddenMagnitude, hiddenPhase, memoryReal, memoryImaginary
 gv = gL.Value;                      % W1 W2 U Q b1 b2
-v = [{Y}, st(:)', gv(:)', {stripdims(gX)}];
+v = [{Y}, st(:)', gv(:)'];
 v = cellfun(@(a) gather(double(extractdata(dlarray(a)))), v, 'UniformOutput', false);
 end
 
