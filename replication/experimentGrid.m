@@ -74,7 +74,7 @@ end
 v = variantInfo(o.variant);
 for g = 1:numel(grid)
     grid(g).baseId = grid(g).id;
-    if v.affects(grid(g)), grid(g).id = [grid(g).id v.suffix]; end
+    if v.affects(grid(g)), grid(g).id = [grid(g).id v.suffixFor(grid(g))]; end
 end
 if ~isempty(o.ids)
     grid = grid(ismember({grid.id}, cellstr(o.ids)) | ismember({grid.baseId}, cellstr(o.ids)));

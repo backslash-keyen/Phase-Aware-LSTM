@@ -1,32 +1,76 @@
-function v = variantInfo(name)
-%VARIANTINFO  Opt-in code variants. '' = released code unchanged (default).
+function v = variantInfo(names, sourceModelRoot)
+%VARIANTINFO  Opt-in code variants. '' or {} = released code unchanged (default).
 %
-% A variant changes behaviour ONLY by putting replication/variants/<name>
-% first on the path. Its results get their own experiment ids
-% (<id>__<name>), fold files, cval files, summary CSV and tables, so they
-% never mix with the unchanged-code results.
-v.name = char(name);
-v.dir  = '';
-v.suffix = '';
-v.affects = @(k) false;
-v.extraDomains = {};   % domains the variant makes runnable
-if isempty(v.name), return; end
-repDir = fileparts(fileparts(mfilename('fullpath')));
-v.dir = fullfile(repDir, 'variants', v.name);
-if ~isfolder(v.dir)
-    error('replication:unknownVariant', 'Unknown variant "%s" (no folder %s).', v.name, v.dir);
+%   v = variantInfo('freezeIntended')
+%   v = variantInfo({'authorSource','targetDomain2'}, 'M:\Earth\pretrainedModels')
+%
+% Variants combine. Each one changes behaviour only by
+%   * putting replication/variants/<name> first on the path (path variants), or
+%   * overriding fields of the configureExperiment object (config variants).
+% Experiments a combination affects are renamed <id>__<name1>__<name2>
+% (names in canonical order), with their own fold files, cval files,
+% summary CSV and tables, so they never mix with, or get skipped because of,
+% the unchanged-code results.
+%
+% Available
+%   freezeIntended  path    DeepRNN learn-rate factors 0.1 / 0.2 actually applied
+%   targetDomain2   path    run 'target-domain-2' (F3-F7) through the original
+%                           target-domain options and builders
+%   authorSource    config  target runs load the authors' source models from
+%                           sourceModelRoot (read-only); source runs are refused
+
+if nargin < 1 || isempty(names), names = {}; end
+if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
+names = cellstr(names);
+order = {'authorSource','freezeIntended','targetDomain2'};
+unknown = setdiff(names, order);
+if ~isempty(unknown)
+    error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
+          strjoin(unknown, ', '), strjoin(order, ', '));
 end
-v.suffix = ['__' v.name];
-switch v.name
-    case 'freezeIntended'
-        % freezeFunctionalLayers is called only when a projection is put in
-        % front of a pretrained source network
-        v.affects = @(k) ~startsWith(lower(k.domain), 'source') && ...
-            any(strcmpi(k.layerName, {'ffnn','lstm','gru','phase-lstm'}));
-    case 'targetDomain2'
-        % F3-F7 layout: route 'target-domain-2' through the original
-        % 'target-domain' training options and builders. No freezing change.
-        v.affects = @(k) strcmpi(k.domain, 'target-domain-2');
-        v.extraDomains = {'target-domain-2'};
+names = order(ismember(order, names));        % canonical order -> stable ids
+
+repDir = fileparts(fileparts(mfilename('fullpath')));
+v.names        = names;
+v.name         = strjoin(names, '+');          % '' when none
+v.suffix       = strjoin(strcat('__', names), '');
+v.dirs         = {};
+v.extraDomains = {};
+v.sourceModelRoot = '';
+tests = {};
+
+for i = 1:numel(names)
+    switch names{i}
+        case 'freezeIntended'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'freezeIntended');
+            % freezeFunctionalLayers is called only when a projection is put
+            % in front of a pretrained source network
+            tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source') && ...
+                any(strcmpi(k.layerName, {'ffnn','lstm','gru','phase-lstm'})); %#ok<AGROW>
+        case 'targetDomain2'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'targetDomain2');
+            v.extraDomains{end+1} = 'target-domain-2';
+            tests{end+1} = @(k) strcmpi(k.domain, 'target-domain-2'); %#ok<AGROW>
+        case 'authorSource'
+            v.sourceModelRoot = char(sourceModelRoot);
+            % every target run loads a pretrained source model
+            tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
+    end
+end
+for i = 1:numel(v.dirs)
+    if ~isfolder(v.dirs{i})
+        error('replication:variantFolder', 'Variant folder missing: %s', v.dirs{i});
+    end
+end
+if isempty(tests)
+    v.affects   = @(k) false;
+    v.suffixFor = @(k) '';
+    v.nameFor   = @(k) '';
+else
+    hits = @(k) cellfun(@(f) f(k), tests);
+    v.affects   = @(k) any(hits(k));
+    % label each experiment only with the variants that actually change it
+    v.suffixFor = @(k) strjoin(strcat('__', names(hits(k))), '');
+    v.nameFor   = @(k) strjoin(names(hits(k)), '_');
 end
 end

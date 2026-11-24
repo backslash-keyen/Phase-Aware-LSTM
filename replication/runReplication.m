@@ -32,6 +32,11 @@ function manifest = runReplication(varargin)
 %                       'targetDomain2' = run the F3-F7 layout
 %                       ('target-domain-2') through the original target-domain
 %                       options and builders, no freezing change (<id>__targetDomain2)
+%                       'authorSource' = target runs load the authors' source
+%                       models from sourceModelRoot, read-only (<id>__authorSource)
+%                       Variants combine: {'authorSource','targetDomain2'}
+%   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
+%                       layout as pretrainedModels/ (cwl\cwl1\DeepRNN\...)
 %   parTrain    false   only with perFold=false: parfor over folds
 %   force       false   rerun experiments already marked done
 %   dryRun      false   check data / pretrained models only, train nothing
@@ -75,13 +80,14 @@ addParameter(p, 'parTrain',    false);
 addParameter(p, 'perFold',     true);
 addParameter(p, 'folds',       []);
 addParameter(p, 'variant',     '');
+addParameter(p, 'sourceModelRoot', 'M:\Earth\pretrainedModels');
 addParameter(p, 'force',       false);
 addParameter(p, 'dryRun',      false);
 addParameter(p, 'stopOnError', false);
 addParameter(p, 'hashData',    true);
 parse(p, varargin{:});
 o = p.Results;
-v = variantInfo(o.variant);
+v = variantInfo(o.variant, o.sourceModelRoot);
 if ~isempty(v.name) && ~o.perFold
     error('replication:variantPerFold', 'Variants run only with ''perFold'', true (results are stored separately).');
 end
@@ -109,10 +115,13 @@ for d = dir(vroot)'
         rmpath(fullfile(vroot, d.name));
     end
 end
-if ~isempty(v.name)
-    addpath(v.dir, '-begin');
-    restorePath = onCleanup(@() rmpath(v.dir));
-    fprintf('[replication] VARIANT %s: %s is first on the path\n', v.name, v.dir);
+for i = 1:numel(v.dirs)
+    addpath(v.dirs{i}, '-begin');
+    fprintf('[replication] VARIANT path: %s is first on the path\n', v.dirs{i});
+end
+restorePath = onCleanup(@() cellfun(@rmpath, v.dirs)); %#ok<NASGU>
+if ~isempty(v.sourceModelRoot)
+    fprintf('[replication] VARIANT authorSource: target runs load source models from %s (read-only)\n', v.sourceModelRoot);
 end
 
 preflight();
@@ -188,7 +197,7 @@ for g = 1:numel(grid)
     if ~isempty(dep)
         missingFolds = [];
         for i = 1:ncval
-            if ~isfile(pretrainedFile(projectLoc, k, i)), missingFolds(end+1) = i; end %#ok<AGROW>
+            if ~isfile(pretrainedFile(projectLoc, k, i, v.sourceModelRoot)), missingFolds(end+1) = i; end %#ok<AGROW>
         end
         if ~isempty(missingFolds)
             row.status  = 'blocked';
@@ -231,6 +240,13 @@ for g = 1:numel(grid)
     config.ncval       = ncval;
     config.parTrain    = o.parTrain;
     config = config.validateModel();
+    if ~isempty(v.sourceModelRoot)
+        % authorSource: get_pretrainedLayers.m reads these properties; nothing is written there
+        config.sourceModelLoc_CWL_1 = fullfile(v.sourceModelRoot, 'cwl', 'cwl1');
+        config.sourceModelLoc_CWL_2 = fullfile(v.sourceModelRoot, 'cwl', 'cwl2');
+        config.sourceModelLoc_MI_1  = fullfile(v.sourceModelRoot, 'mi',  'mi1');
+        config.sourceModelLoc_MI_3  = fullfile(v.sourceModelRoot, 'mi',  'mi3');
+    end
 
     outDir = fullfile(projectLoc, 'cvalresults', config.datasetType, config.typeNet);
     before = listResults(outDir);
@@ -251,9 +267,9 @@ for g = 1:numel(grid)
             [trainedModels, evals] = loadFolds(foldDir, ncval);
             if v.affects(k)
                 % variant results never go next to the unchanged-code results
-                row.resultFile = saveVariantResults(config, trainedModels, evals, v, outDir);
+                row.resultFile = saveVariantResults(config, trainedModels, evals, v.nameFor(k), v.suffixFor(k), outDir);
                 row.status = 'done';
-                row.message = ['variant ' v.name];
+                row.message = ['variant ' v.nameFor(k)];
                 clear trainedModels evals
                 row.finishedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
                 manifest = logRow(manifest, manifestFile, row, g, numel(grid), false);
@@ -326,24 +342,24 @@ end
 complete = nSaved == config.ncval;
 end
 
-function file = saveVariantResults(config, trainedModels, evals, v, outDir)
+function file = saveVariantResults(config, trainedModels, evals, vname, vsuffix, outDir)
 % Same content as kFold_saveResults.m, in cvalresults/<ds>/<typeNet>/variants/<name>/
-vdir = fullfile(outDir, 'variants', v.name);
+vdir = fullfile(outDir, 'variants', vname);
 if ~exist(vdir, 'dir'), mkdir(vdir); end
 timestamp = char(datetime('now', 'Format', 'yyMMdd_HHmm'));
 file = fullfile(vdir, sprintf('cval_%s_%s_%d_%s%s_%s.mat', config.typeNet, config.domain, ...
-                config.ncats, config.layerName, v.suffix, timestamp));
-variant = v.name; %#ok<NASGU>
+                config.ncats, config.layerName, vsuffix, timestamp));
+variant = vname; %#ok<NASGU>
 save(file, 'trainedModels', 'evals', 'variant', '-v7.3');
 [mTr, mVa, mTe, mTime] = generateResultSummary(config, evals);   % original
-csv = fullfile(vdir, sprintf('projectionModule_%s.csv', v.name));
+csv = fullfile(vdir, sprintf('projectionModule_%s.csv', vname));
 if ~isfile(csv)
     fid = fopen(csv, 'w');
     fprintf(fid, 'Variant,TypeNet,Domain,NCats,LayerName,TrainAcc,ValAcc,TestAcc,TrainTime,Timestamp\n');
     fclose(fid);
 end
 fid = fopen(csv, 'a');
-fprintf(fid, '%s,%s,%s,%d,%s,%.4f,%.4f,%.4f,%.2f,%s\n', v.name, config.typeNet, config.domain, ...
+fprintf(fid, '%s,%s,%s,%d,%s,%.4f,%.4f,%.4f,%.2f,%s\n', vname, config.typeNet, config.domain, ...
         config.ncats, config.layerName, mTr, mVa, mTe, mTime, timestamp);
 fclose(fid);
 fprintf('[replication] variant results -> %s\n', file);

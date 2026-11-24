@@ -33,7 +33,7 @@ v = variantInfo(o.variant);
 if isempty(v.name)
     outDir = fullfile(repDir, 'results', 'tables');
 else
-    outDir = fullfile(repDir, 'results', ['tables_' v.name]);   % never overwrites the unchanged-code tables
+    outDir = fullfile(repDir, 'results', ['tables_' strrep(v.name, '+', '_')]);   % never overwrites the unchanged-code tables
 end
 if ~exist(outDir, 'dir'), mkdir(outDir); end
 oldDir = cd(projectLoc); restoreDir = onCleanup(@() cd(oldDir));

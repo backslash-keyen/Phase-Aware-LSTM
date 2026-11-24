@@ -20,7 +20,7 @@ function layers = freezeFunctionalLayers(layers, modelType)
 %             branches already assign back).
 
 if ~strcmp(modelType, 'DeepRNN')
-    layers = variantCallOriginal('freezeFunctionalLayers', layers, modelType);
+    layers = callOriginal_freezeIntended('freezeFunctionalLayers', layers, modelType);
     return
 end
 

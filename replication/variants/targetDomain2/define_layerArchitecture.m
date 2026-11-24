@@ -12,5 +12,5 @@ cfg = config;
 if strcmpi(config.domain, 'target-domain-2')
     cfg.domain = 'target-domain';
 end
-layers = variantCallOriginal('define_layerArchitecture', model, cfg);
+layers = callOriginal_targetDomain2('define_layerArchitecture', model, cfg);
 end

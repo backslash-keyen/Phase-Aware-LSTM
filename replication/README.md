@@ -130,6 +130,22 @@ runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN'
 runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'gru'})
 ```
 
+### The opt-in `authorSource` variant (the authors' source models)
+
+`'variant', 'authorSource'` makes target runs load the authors' original source models instead of the ones retrained here. It sets the `sourceModelLoc_*` properties of `configureExperiment` to `sourceModelRoot` (default `M:\Earth\pretrainedModels`, same layout as `pretrainedModels/`: `cwl\cwl1\DeepRNN\sourceDomainClassifier_N2_DeepRNN_<i>.mat`), which `get_pretrainedLayers.m` reads. No original file is shadowed. The folder is only read: source-domain runs, the only ones that save models, are refused under this variant. Results are labelled `<id>__authorSource`, so they neither collide with the retrained-source runs nor get skipped because of them.
+
+### Combining variants
+
+Pass several: `'variant', {'authorSource','targetDomain2'}`. Each experiment is labelled only with the variants that actually change it, in a fixed order (`authorSource`, `freezeIntended`, `targetDomain2`). For example, `cwl_N2_target-domain-2_DeepRNN_ffnn__authorSource__targetDomain2`. Tables: `buildTables('variant', {...})` writes `results/tables_<names>/`.
+
+```matlab
+% authors' source models, Fp1-Fz, one projection at a time
+runAll('variant','authorSource','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain','layerNames',{'ffnn'})
+% authors' source models, F3-F7
+runAll('variant',{'authorSource','targetDomain2'},'datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'ffnn'})
+% other root:  ..., 'sourceModelRoot', 'D:\somewhere\pretrainedModels'
+```
+
 ### Other assumptions, flagged in the table footnotes
 
 * Table 8 "Baseline" is mapped to DeepRNN trained directly on the masked target data (no transfer), for when that domain becomes runnable.

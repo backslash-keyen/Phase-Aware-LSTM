@@ -2,6 +2,11 @@ function [ok, reason] = supportCheck(k, v)
 %SUPPORTCHECK  Can the released code (plus the active variant, if any) run experiment k?
 if nargin < 2, v = struct('name', '', 'extraDomains', {{}}); end
 ok = true; reason = '';
+if isfield(v, 'sourceModelRoot') && ~isempty(v.sourceModelRoot) && startsWith(lower(k.domain), 'source')
+    ok = false;
+    reason = 'authorSource is read-only: source-domain runs (which save models) are not run with it';
+    return
+end
 if strcmpi(k.datasetType, 'MI') && any(strcmpi(k.typeNet, {'EEGNet','transformer'}))
     ok = false;
     reason = sprintf(['get_trainingOptions.m calls get_trainingOptions_Graz_%s, ' ...

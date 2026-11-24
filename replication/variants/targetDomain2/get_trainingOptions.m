@@ -13,5 +13,5 @@ cfg = config;
 if strcmpi(config.domain, 'target-domain-2')
     cfg.domain = 'target-domain';
 end
-hyperParameters = variantCallOriginal('get_trainingOptions', cfg);
+hyperParameters = callOriginal_targetDomain2('get_trainingOptions', cfg);
 end

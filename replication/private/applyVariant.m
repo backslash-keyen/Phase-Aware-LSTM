@@ -6,7 +6,7 @@ for t = 1:numel(T)
         for c = 1:numel(T(t).rows(r).cells)
             k = T(t).rows(r).cells{c};
             if strcmp(k.kind, 'exp') && v.affects(k)
-                k.id = [k.id v.suffix];
+                k.id = [k.id v.suffixFor(k)];
                 T(t).rows(r).cells{c} = k;
             end
         end
