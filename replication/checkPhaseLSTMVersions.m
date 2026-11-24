@@ -144,8 +144,8 @@ fprintf(['Expected: fast identical@T = 1; every version''s diff@T=%d well below 
 report = rmfield(res, 'vals');
 if o.trainSmoke
     smoke = smokeTrain(make, names, [res.version], o, useGPU);
-    [report.trainNetworkOK]  = smoke.ok;
-    [report.trainNetworkMsg] = smoke.msg;
+    [report.trainNetworkOK]  = smoke.ok{:};
+    [report.trainNetworkMsg] = smoke.msg{:};
 end
 end
 
