@@ -20,9 +20,11 @@ function report = checkPhaseLSTMVersions(varargin)
 % Each layer sits in a dlnetwork after a sequenceInputLayer, as in training,
 % so version 4's backward() is the one dlgradient uses. All versions get the
 % same weights and input. For every output (Y, the four final states) and
-% every gradient (W1 W2 U Q b1 b2) it reports the largest
-% difference relative to the largest value, and it times one
-% forward+backward pass (one training iteration of this layer).
+% every gradient (W1 W2 U Q b1 b2) it reports
+%   identical@T   bit-for-bit equal to the original at full length (single)
+%   diff@Tcheck   largest difference relative to the largest value over the
+%                 first Tcheck steps in double precision (see note in code)
+% and it times one forward+backward pass (one training iteration).
 %
 % H is the projection size = channel count of the pretrained source model.
 p = inputParser;
@@ -35,6 +37,7 @@ addParameter(p, 'env', 'auto'); % 'auto' | 'gpu' | 'cpu'
 addParameter(p, 'seed', 0);
 addParameter(p, 'versions', 1:5);
 addParameter(p, 'profile', false);
+addParameter(p, 'Tcheck', 20);  % steps used for the accuracy comparison
 parse(p, varargin{:}); o = p.Results;
 
 repDir  = fileparts(mfilename('fullpath'));
@@ -60,16 +63,13 @@ if useGPU, X = gpuArray(X); w = gpuArray(w); end
 % NOT traced: in training the projection layer's input is data, never a
 % variable being differentiated (tracing it breaks the original layer).
 
-res = struct('version', {}, 'name', {}, 'seconds', {}, 'speedup', {}, ...
-             'maxRelDiff', {}, 'identical', {}, 'detail', {});
-for k = vers
-    net = dlnetwork([input; make{k}(o.H, 'Name', 'phaseLSTM', 'OutputMode', 'sequence')]);
-    L = net.Learnables;
-    assert(isequal(L.Parameter, netRef.Learnables.Parameter), 'learnables differ for %s', names{k});
-    L.Value = netRef.Learnables.Value;
-    net.Learnables = L;
-    if useGPU, net = dlupdate(@gpuArray, net); end
+labels = {'Y','h','phase','memRe','memIm','dW1','dW2','dU','dQ','db1','db2'};
+res = struct('version', {}, 'name', {}, 'seconds', {}, 'speedup', {}, 'identical', {}, ...
+             'maxRelDiff', {}, 'detail', {}, 'vals', {});
 
+% ---- 1) speed at full length, single precision (as in training) --------
+for k = vers
+    net = makeNet(make{k}, o.H, o.C, o.T, netRef, useGPU, 'single');
     ts = zeros(1, o.reps + 1);
     for r = 1:o.reps + 1                       % first call is warm-up
         tic;
@@ -85,35 +85,82 @@ for k = vers
         profile('off');
         showProfile(profile('info'), 15);
     end
-    vals = flatten(out);
     res(end+1).version = k; %#ok<AGROW>
     res(end).name    = names{k};
     res(end).seconds = median(ts(2:end));
-    res(end).vals    = vals;
+    res(end).vals    = flatten(out);
 end
 
-ref = res(1);
+% ---- 2) accuracy on a short sequence, double precision ------------------
+% The original recurrence is very sensitive: two runs of the SAME original
+% code in single vs double precision already differ by O(1) after ~50 of
+% the 500 steps (rounding differences grow ~10x every few steps, and the
+% atan2 phase can jump by 2*pi). Comparing versions at T = 500 therefore
+% only measures that sensitivity. Accuracy is checked on the first Tcheck
+% steps in double precision, where rounding is far below the differences a
+% real bug would cause; the original's own single-vs-double difference
+% over the same steps is printed as the rounding floor.
+Xc = double(X(:,:,1:o.Tcheck)); wc = double(w(:,:,1:o.Tcheck));
+acc = cell(1, numel(res));
+for i = 1:numel(res)
+    net = makeNet(make{res(i).version}, o.H, o.C, o.Tcheck, netRef, useGPU, 'double');
+    out = cell(1, 3);
+    [out{:}] = dlfeval(@lossAndGrads, net, Xc, wc);
+    acc{i} = flatten(out);
+end
+net = makeNet(make{1}, o.H, o.C, o.Tcheck, netRef, useGPU, 'single');
+out = cell(1, 3);
+[out{:}] = dlfeval(@lossAndGrads, net, single(Xc), single(wc));
+floorVals = flatten(out);
+floorDiff = relDiffs(acc{1}, floorVals);
+
+% the same sensitivity at full length, for the record
+net = makeNet(make{1}, o.H, o.C, o.T, netRef, useGPU, 'double');
+out = cell(1, 3);
+[out{:}] = dlfeval(@lossAndGrads, net, double(X), double(w));
+fullDiff = relDiffs(flatten(out), res(1).vals);
+
 fprintf('\nphase-aware LSTM, %s, H=%d B=%d T=%d, forward+backward, median of %d\n', ...
         ternary(useGPU, 'GPU', 'CPU'), o.H, o.B, o.T, o.reps);
-fprintf('%-3s %-10s %9s %8s %13s %10s\n', 'v', 'name', 'seconds', 'speedup', 'max rel diff', 'identical');
-labels = {'Y','h','phase','memRe','memIm','dW1','dW2','dU','dQ','db1','db2'};
+fprintf('%-3s %-10s %9s %8s %16s %22s\n', 'v', 'name', 'seconds', 'speedup', ...
+        'identical@T', sprintf('max rel diff@T=%d', o.Tcheck));
 for k = 1:numel(res)
-    d = zeros(1, numel(labels)); same = true;
-    for j = 1:numel(labels)
-        a = ref.vals{j}; b = res(k).vals{j};
-        d(j) = max(abs(a(:) - b(:))) / max(max(abs(a(:))), realmin('single'));
-        same = same && isequal(a, b);
-    end
-    res(k).speedup    = ref.seconds / res(k).seconds;
-    res(k).maxRelDiff = max(d);
+    same = true;
+    for j = 1:numel(labels), same = same && isequal(res(1).vals{j}, res(k).vals{j}); end
+    d = relDiffs(acc{1}, acc{k});
+    res(k).speedup    = res(1).seconds / res(k).seconds;
     res(k).identical  = same;
+    res(k).maxRelDiff = max(d);
     res(k).detail     = cell2struct(num2cell(d), labels, 2);
-    fprintf('%-3d %-10s %9.3f %7.1fx %13.2e %10d\n', res(k).version, res(k).name, ...
-            res(k).seconds, res(k).speedup, res(k).maxRelDiff, same);
+    fprintf('%-3d %-10s %9.3f %7.1fx %16d %22.2e\n', res(k).version, res(k).name, ...
+            res(k).seconds, res(k).speedup, same, res(k).maxRelDiff);
 end
-fprintf(['\nExpected: fast identical = 1; fastest, backward and fused max rel diff around 1e-6 ' ...
-         'or below (single precision).\nPer-output differences: report(k).detail\n\n']);
+fprintf(['\nRounding floor: the ORIGINAL in single vs double precision differs by %.2e over the ' ...
+         'first %d steps\nand by %.2e over all %d steps (Y %.2e).\n'], max(floorDiff), o.Tcheck, ...
+         max(fullDiff), o.T, fullDiff(1));
+fprintf(['Expected: fast identical@T = 1; every version''s diff@T=%d well below the rounding floor ' ...
+         '(double precision).\nPer-output differences: report(k).detail\n\n'], o.Tcheck);
 report = rmfield(res, 'vals');
+end
+
+function net = makeNet(ctor, H, C, T, netRef, useGPU, precision)
+net = dlnetwork([sequenceInputLayer(C, 'MinLength', T, 'Name', 'input'); ...
+                 ctor(H, 'Name', 'phaseLSTM', 'OutputMode', 'sequence')]);
+L = net.Learnables;
+assert(isequal(L.Parameter, netRef.Learnables.Parameter), 'learnables differ');
+L.Value = netRef.Learnables.Value;
+net.Learnables = L;
+cv = str2func(precision);       % @single or @double, both work on dlarray
+net = dlupdate(cv, net);
+if useGPU, net = dlupdate(@gpuArray, net); end
+end
+
+function d = relDiffs(A, Bv)
+d = zeros(1, numel(A));
+for j = 1:numel(A)
+    a = A{j}; b = Bv{j};
+    d(j) = max(abs(a(:) - b(:))) / max(max(abs(a(:))), realmin);
+end
 end
 
 function [Y, S, gL] = lossAndGrads(net, Xraw, w)
