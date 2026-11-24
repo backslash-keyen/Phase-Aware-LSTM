@@ -8,7 +8,7 @@ function layers = get_pLayer_phaseLSTM(model)
 % 'phaseLSTM' for phaseAwareLSTMFast with the same size, name and
 % OutputMode. Everything else in the graph (freezing, EEGNet reshape,
 % Transformer re-routing) is exactly what the original builds.
-layers = variantCallOriginal('get_pLayer_phaseLSTM', model);
+layers = callOriginal_fastPhaseLSTM('get_pLayer_phaseLSTM', model);
 old = layers.Layers(strcmp({layers.Layers.Name}, 'phaseLSTM'));
 assert(isscalar(old) && isa(old, 'phaseAwareLSTM'), ...
     'fastPhaseLSTM: expected one phaseAwareLSTM layer named ''phaseLSTM''.');
