@@ -16,9 +16,9 @@ classdef phaseAwareLSTMFast < nnet.layer.Layer & nnet.layer.Formattable & nnet.l
     %   3. Loop-invariant work (U, Q, the OutputMode string test) is done
     %      once before the loop instead of at every step.
     %
-    % None of these changes a single value. checkFastPhaseLSTM.m in this
-    % folder compares outputs and gradients against the original layer
-    % with isequal (bit for bit) and times both.
+    % None of these changes a single value. replication/checkPhaseLSTMVersions.m
+    % compares outputs and gradients against the original layer bit for bit
+    % and times both.
 
     properties
         NumHiddenUnits

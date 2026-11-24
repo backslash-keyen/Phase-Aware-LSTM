@@ -20,18 +20,29 @@ function v = variantInfo(names, sourceModelRoot)
 %                           sourceModelRoot (read-only); source runs are refused
 %   fastPhaseLSTM   path    speed only: the phase-aware projection uses
 %                           phaseAwareLSTMFast (same arithmetic, no full-size
-%                           copy of Y per time step)
+%                           copy of Y per time step), bit-identical
+%   fastestPhaseLSTM path   speed only: phaseAwareLSTMFastest (version 3,
+%                           same model, one stacked matmul per step; equal
+%                           to the original up to float rounding)
+%   backwardPhaseLSTM path  speed only: phaseAwareLSTMBackward (version 4,
+%                           version-3 forward + hand-written backward pass)
+%   The three phase-LSTM speed variants replace the same layer, so at most
+%   one of them can be used at a time.
 
 if nargin < 1 || isempty(names), names = {}; end
 if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
 names = cellstr(names);
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'};
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
+speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'};
+if nnz(ismember(names, speedVariants)) > 1
+    error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
+end
 
 repDir = fileparts(fileparts(mfilename('fullpath')));
 v.names        = names;
@@ -58,8 +69,8 @@ for i = 1:numel(names)
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
-        case 'fastPhaseLSTM'
-            v.dirs{end+1} = fullfile(repDir, 'variants', 'fastPhaseLSTM');
+        case {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM'}
+            v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
     end
 end

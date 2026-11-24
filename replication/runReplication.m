@@ -38,7 +38,12 @@ function manifest = runReplication(varargin)
 %                       uses phaseAwareLSTMFast, a copy of phaseAwareLSTM.m with
 %                       the same arithmetic but no full-size copy of Y per time
 %                       step; see replication/variants/fastPhaseLSTM and its
-%                       checkFastPhaseLSTM.m (<id>__fastPhaseLSTM)
+%                       replication/checkPhaseLSTMVersions.m (<id>__fastPhaseLSTM)
+%                       'fastestPhaseLSTM' = speed only, version 3: same model,
+%                       stacked per-step arithmetic (<id>__fastestPhaseLSTM)
+%                       'backwardPhaseLSTM' = speed only, version 4: version-3
+%                       forward + hand-written backward (<id>__backwardPhaseLSTM)
+%                       At most one of the three phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
 %                       layout as pretrainedModels/ (cwl\cwl1\DeepRNN\...)
