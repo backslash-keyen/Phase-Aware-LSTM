@@ -118,7 +118,10 @@ end
 
 function [Y, S, gL] = lossAndGrads(net, Xraw, w)
 X = dlarray(Xraw, 'CBT');            % created here, so untraced (as in training)
-[Y, S] = forward(net, X);
+% Acceleration 'none': dlnetwork's cached (accelerated) version of an
+% Acceleratable custom layer breaks under dlfeval in R2025b, and the four
+% versions should be compared on their own code.
+[Y, S] = forward(net, X, 'Acceleration', 'none');
 Y = stripdims(Y);
 loss = sum(Y .* w, 'all');
 gL = dlgradient(loss, net.Learnables);
