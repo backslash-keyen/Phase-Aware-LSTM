@@ -119,6 +119,17 @@ runAll('datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain'
 runAll('datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain','layerNames',{'ffnn','lstm','gru'}, 'variant','freezeIntended')
 ```
 
+### The opt-in `targetDomain2` variant (F3–F7 layout)
+
+`perfold_dataset.m` and `retrievePretrainedNet.m` already handle `target-domain-2` (F3–F7, data in `targetdomain2/`), but the original `get_trainingOptions.m` and `define_layerArchitecture.m` reject it. With `'variant', 'targetDomain2'`, `replication/variants/targetDomain2/` shadows those two functions for that run only. They rename the domain to `target-domain` and call the **original** functions, so the training options and projection builders are exactly the ones the Fp1–Fz runs use. Freezing is not changed. Results are stored and labelled separately (`<id>__targetDomain2`, `cvalresults/<ds>/<typeNet>/variants/targetDomain2/`, `results/tables_targetDomain2/`).
+
+```matlab
+% DeepRNN F3-F7, one projection at a time
+runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'ffnn'})
+runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'lstm'})
+runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'gru'})
+```
+
 ### Other assumptions, flagged in the table footnotes
 
 * Table 8 "Baseline" is mapped to DeepRNN trained directly on the masked target data (no transfer), for when that domain becomes runnable.

@@ -1,5 +1,6 @@
-function [ok, reason] = supportCheck(k)
-%SUPPORTCHECK  Can the released code, unchanged, run experiment k?
+function [ok, reason] = supportCheck(k, v)
+%SUPPORTCHECK  Can the released code (plus the active variant, if any) run experiment k?
+if nargin < 2, v = struct('name', '', 'extraDomains', {{}}); end
 ok = true; reason = '';
 if strcmpi(k.datasetType, 'MI') && any(strcmpi(k.typeNet, {'EEGNet','transformer'}))
     ok = false;
@@ -7,10 +8,13 @@ if strcmpi(k.datasetType, 'MI') && any(strcmpi(k.typeNet, {'EEGNet','transformer
                       'which is not in the repository'], k.typeNet);
     return
 end
-if ~any(strcmpi(k.domain, {'source-domain','target-domain'}))
+if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
     ok = false;
     reason = sprintf(['get_trainingOptions.m and define_layerArchitecture.m accept only ' ...
                       'source-domain and target-domain, not "%s"'], k.domain);
+    if strcmpi(k.domain, 'target-domain-2')
+        reason = [reason '; run with ''variant'', ''targetDomain2'''];
+    end
     return
 end
 if strcmpi(k.layerName, 'baseTransfer')

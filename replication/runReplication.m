@@ -29,6 +29,9 @@ function manifest = runReplication(varargin)
 %                       factors freezeFunctionalLayers.m intends (0.1 / 0.2),
 %                       see replication/variants/freezeIntended; results are
 %                       stored and labelled separately (<id>__freezeIntended)
+%                       'targetDomain2' = run the F3-F7 layout
+%                       ('target-domain-2') through the original target-domain
+%                       options and builders, no freezing change (<id>__targetDomain2)
 %   parTrain    false   only with perFold=false: parfor over folds
 %   force       false   rerun experiments already marked done
 %   dryRun      false   check data / pretrained models only, train nothing
@@ -125,7 +128,7 @@ end
 if o.listOnly
     fprintf('[replication] %d experiments selected (run order):\n', numel(grid));
     for g = 1:numel(grid)
-        [ok, why] = supportCheck(grid(g));
+        [ok, why] = supportCheck(grid(g), v);
         fprintf('  %3d  %-55s %s\n', g, grid(g).id, ternary(ok, '', ['(unsupported: ' why ')']));
     end
     manifest = readManifest(manifestFile);
@@ -148,7 +151,7 @@ for g = 1:numel(grid)
         continue
     end
 
-    [ok, reason] = supportCheck(k);
+    [ok, reason] = supportCheck(k, v);
     if ~ok
         row.status = 'unsupported'; row.message = reason;
         manifest = logRow(manifest, manifestFile, row, g, numel(grid), o.dryRun);

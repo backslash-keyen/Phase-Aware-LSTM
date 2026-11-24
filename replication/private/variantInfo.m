@@ -9,6 +9,7 @@ v.name = char(name);
 v.dir  = '';
 v.suffix = '';
 v.affects = @(k) false;
+v.extraDomains = {};   % domains the variant makes runnable
 if isempty(v.name), return; end
 repDir = fileparts(fileparts(mfilename('fullpath')));
 v.dir = fullfile(repDir, 'variants', v.name);
@@ -22,5 +23,10 @@ switch v.name
         % front of a pretrained source network
         v.affects = @(k) ~startsWith(lower(k.domain), 'source') && ...
             any(strcmpi(k.layerName, {'ffnn','lstm','gru','phase-lstm'}));
+    case 'targetDomain2'
+        % F3-F7 layout: route 'target-domain-2' through the original
+        % 'target-domain' training options and builders. No freezing change.
+        v.affects = @(k) strcmpi(k.domain, 'target-domain-2');
+        v.extraDomains = {'target-domain-2'};
 end
 end
