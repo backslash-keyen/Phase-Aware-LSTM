@@ -34,6 +34,11 @@ function manifest = runReplication(varargin)
 %                       options and builders, no freezing change (<id>__targetDomain2)
 %                       'authorSource' = target runs load the authors' source
 %                       models from sourceModelRoot, read-only (<id>__authorSource)
+%                       'fastPhaseLSTM' = speed only: the phase-aware projection
+%                       uses phaseAwareLSTMFast, a copy of phaseAwareLSTM.m with
+%                       the same arithmetic but no full-size copy of Y per time
+%                       step; see replication/variants/fastPhaseLSTM and its
+%                       checkFastPhaseLSTM.m (<id>__fastPhaseLSTM)
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
 %                       layout as pretrainedModels/ (cwl\cwl1\DeepRNN\...)
