@@ -45,6 +45,8 @@ function manifest = runReplication(varargin)
 %                       forward + hand-written backward (<id>__backwardPhaseLSTM)
 %                       'fusedPhaseLSTM' = speed only, version 5: version 4 with
 %                       one fused GPU kernel per time step (<id>__fusedPhaseLSTM)
+%                       'signedPhaseLSTM' = DIAGNOSTIC, not the released model:
+%                       version 5 with a signed hidden output (<id>__signedPhaseLSTM)
 %                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
