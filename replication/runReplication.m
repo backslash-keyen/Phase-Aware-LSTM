@@ -53,6 +53,8 @@ function manifest = runReplication(varargin)
 %                       its options routing (<id>__notrigPhaseLSTM)
 %                       'halfAngMatchedPhaseLSTM' = DIAGNOSTIC pair to notrig: half-angle
 %                       layer with notrig's clip, biases, options (<id>__halfAngMatchedPhaseLSTM)
+%                       'piInputPhaseLSTM' = released layer, fused, phase bias pi on the
+%                       input rotation + phase-aware options: the minimal fix (<id>__piInputPhaseLSTM)
 %                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same

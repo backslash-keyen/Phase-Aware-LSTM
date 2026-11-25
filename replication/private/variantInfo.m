@@ -45,6 +45,9 @@ function v = variantInfo(names, sourceModelRoot)
 %   halfAngMatchedPhaseLSTM path  DIAGNOSTIC pair to notrigPhaseLSTM: released
 %                           half-angle layer (fused) with notrig's clip +-5,
 %                           biases and options, so only the angle map differs
+%   piInputPhaseLSTM path   released layer (fused) with phase bias pi on the
+%                           input rotation (one init line) + the phase-aware
+%                           options, 20 target epochs: the minimal fix
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -54,17 +57,17 @@ function v = variantInfo(names, sourceModelRoot)
 if nargin < 1 || isempty(names), names = {}; end
 if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
 names = cellstr(names);
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','phaseAwareOptions'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','phaseAwareOptions'};
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM'}, names)) > 1
-    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, notrigPhaseLSTM and halfAngMatchedPhaseLSTM all replace get_trainingOptions; use one.');
+if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'}, names)) > 1
+    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, notrigPhaseLSTM, halfAngMatchedPhaseLSTM and piInputPhaseLSTM all replace get_trainingOptions; use one.');
 end
-speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM'};
+speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) > 1
     error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
 end
@@ -94,7 +97,7 @@ for i = 1:numel(names)
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
-        case {'notrigPhaseLSTM','halfAngMatchedPhaseLSTM'}
+        case {'notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'}
             v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
