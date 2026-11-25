@@ -167,6 +167,16 @@ the output h**. Folders `fast/piSign_<mode>/`, variants `pv_piSign_<mode>`.
 Not included: a 2H output [real; imaginary]. The projection's output width
 must equal the source model's input width, so doubling it breaks the transfer.
 
+Fold 2 (2026-11-25, tuned options, our source models), val / test, about 13 min each:
+none 65.9 / 60.0, sum 67.2 / 61.2, realProj 70.0 / 64.0, tanhRe 68.3 / 64.1, none collapsed.
+The control (none) is the same model as piInputPhaseLSTM, which gave 62.4 test on
+fold 2, so differences of about 2 points between implementations are rounding
+drift over T = 500. One fold does not settle a 4-point gain.
+
+| version (cont.) | fold 2 val | fold 2 test | min/fold | note |
+|---|---|---|---|---|
+| cstmArch1Mar25 | 67.7 | 62.5 | 13.5 | pv_ |
+
 ```matlab
 for m = {'none','sum','realProj','tanhRe'}
     runReplication('ids', {'cwl_N2_target-domain_DeepRNN_phase-lstm'}, 'folds', 2, 'variant', ['pv_piSign_' m{1}]);
