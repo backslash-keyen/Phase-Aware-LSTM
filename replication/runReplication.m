@@ -34,6 +34,28 @@ function manifest = runReplication(varargin)
 %                       options and builders, no freezing change (<id>__targetDomain2)
 %                       'authorSource' = target runs load the authors' source
 %                       models from sourceModelRoot, read-only (<id>__authorSource)
+%                       'fastPhaseLSTM' = speed only: the phase-aware projection
+%                       uses phaseAwareLSTMFast, a copy of phaseAwareLSTM.m with
+%                       the same arithmetic but no full-size copy of Y per time
+%                       step; see replication/variants/fastPhaseLSTM and its
+%                       replication/checkPhaseLSTMVersions.m (<id>__fastPhaseLSTM)
+%                       'fastestPhaseLSTM' = speed only, version 3: same model,
+%                       stacked per-step arithmetic (<id>__fastestPhaseLSTM)
+%                       'backwardPhaseLSTM' = speed only, version 4: version-3
+%                       forward + hand-written backward (<id>__backwardPhaseLSTM)
+%                       'fusedPhaseLSTM' = speed only, version 5: version 4 with
+%                       one fused GPU kernel per time step (<id>__fusedPhaseLSTM)
+%                       'signedPhaseLSTM' = DIAGNOSTIC, not the released model:
+%                       version 5 with a signed hidden output (<id>__signedPhaseLSTM)
+%                       'noCarryPhaseLSTM' = DIAGNOSTIC: released layer without
+%                       memory carry, eps clamps as in June 2025 (<id>__noCarryPhaseLSTM)
+%                       'notrigPhaseLSTM' = REPRODUCTION: Nov 2025 notrig layer +
+%                       its options routing (<id>__notrigPhaseLSTM)
+%                       'halfAngMatchedPhaseLSTM' = DIAGNOSTIC pair to notrig: half-angle
+%                       layer with notrig's clip, biases, options (<id>__halfAngMatchedPhaseLSTM)
+%                       'piInputPhaseLSTM' = released layer, fused, phase bias pi on the
+%                       input rotation + phase-aware options: the minimal fix (<id>__piInputPhaseLSTM)
+%                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
 %                       layout as pretrainedModels/ (cwl\cwl1\DeepRNN\...)
