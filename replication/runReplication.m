@@ -51,6 +51,8 @@ function manifest = runReplication(varargin)
 %                       memory carry, eps clamps as in June 2025 (<id>__noCarryPhaseLSTM)
 %                       'notrigPhaseLSTM' = REPRODUCTION: Nov 2025 notrig layer +
 %                       its options routing (<id>__notrigPhaseLSTM)
+%                       'halfAngMatchedPhaseLSTM' = DIAGNOSTIC pair to notrig: half-angle
+%                       layer with notrig's clip, biases, options (<id>__halfAngMatchedPhaseLSTM)
 %                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
