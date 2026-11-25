@@ -48,6 +48,17 @@ function v = variantInfo(names, sourceModelRoot)
 %   piInputPhaseLSTM path   released layer (fused) with phase bias pi on the
 %                           input rotation (one init line) + the phase-aware
 %                           options, 20 target epochs: the minimal fix
+%   notrigFastPhaseLSTM path  FAST port (fused) of the Nov 2025 notrig layer
+%                           behind the paper's CWL phase-lstm results, with
+%                           its options routing; same model as notrigPhaseLSTM
+%   ver5FastPhaseLSTM path  FAST port (fused) of phaseAwareLSTM_ver5 (Oct 2025,
+%                           run as 'phase-lstm-ver5' in Nov 2025): notrig
+%                           without clipping and with phase bias pi; notrig
+%                           options routing
+%   pv_<version>    path    FAST port of one of Keyen's phase-layer versions
+%                           (replication/versions/fast/<version>, e.g.
+%                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
+%                           options; see replication/versions/README.md
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -57,18 +68,26 @@ function v = variantInfo(names, sourceModelRoot)
 if nargin < 1 || isempty(names), names = {}; end
 if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
 names = cellstr(names);
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','phaseAwareOptions'};
+pvDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'versions', 'fast');
+pvNames = names(startsWith(names, 'pv_'));
+for i = 1:numel(pvNames)
+    if ~isfolder(fullfile(pvDir, extractAfter(pvNames{i}, 'pv_'))) || strcmp(pvNames{i}, 'pv_common')
+        error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
+    end
+end
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions'};
+order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'}, names)) > 1
-    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, notrigPhaseLSTM, halfAngMatchedPhaseLSTM and piInputPhaseLSTM all replace get_trainingOptions; use one.');
+if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'}, names)) + numel(pvNames) > 1
+    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2 and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
 end
-speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'};
-if nnz(ismember(names, speedVariants)) > 1
+speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'};
+if nnz(ismember(names, speedVariants)) + numel(pvNames) > 1
     error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
 end
 
@@ -97,8 +116,12 @@ for i = 1:numel(names)
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
-        case {'notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM'}
+        case {'notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'}
             v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
+            tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case pvNames
+            v.dirs{end+1} = fullfile(pvDir, 'common');
+            v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');

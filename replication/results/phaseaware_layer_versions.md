@@ -30,3 +30,7 @@ Oldest first. "Parent" is the version each one is compared with. Dates are file 
 | d4 | halfAngMatchedPhaseLSTM | phaseAwareLSTMHalfAngMatched | 81d44ee, 25 Nov 2026 | diagnostic pair to d3 | v5 with 6's clip +-5, full b1, b2 = unit-forget, and d3's options; only the angle map differs from d3 |
 
 Temporary diagnostic edits (not committed; run in _speedcheck and restored): v5 with b2 = pi; d4 with b2 = 0; d4 with released clip/b1 + b2 = pi; tonight's clip/phase-bias screen on 8.
+
+**Update (2026-11-25):** the full collection, with a fast port of every runnable
+version, a verbatim copy of each original and a registry, is in
+`replication/versions/` (see its README.md).
