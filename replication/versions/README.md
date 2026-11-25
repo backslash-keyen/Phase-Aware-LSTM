@@ -130,8 +130,13 @@ original to about 1e-9 (tanh 6e-7 and rotAngle 8e-8, where the recurrence is
 very sensitive at large weight scale). halfAngV2 was checked at batch size 1
 because the original only runs there.
 
-Still to check on the PC with MATLAB R2025b: `checkPhaseVersions` (dlnetwork,
-GPU kernel, trainNetwork path, timing at H 30, B 197, T 500).
+On the PC (MATLAB R2025b, GTX 1650, 2026-11-25), `checkPhaseVersions`: the
+output Y matches the original for all 28 cases (most about 1e-14, tanh 3e-8,
+notrigOct25 3e-9, halfAng 4e-7, halfAngV2 9e-6), the gradients to 1e-11 or
+better except tanh 5e-7, notrigOct25 3e-8, halfAng 2e-6 and halfAngV2 5e-5, and
+trainNetwork runs for every one. One forward+backward at H 30, B 197, T 500
+takes about 1.5 to 2.8 s with the shared engine and about 0.6 s with the
+dedicated ports (notrigFastPhaseLSTM, ver5FastPhaseLSTM, fusedPhaseLSTM).
 
 ## Comparison
 

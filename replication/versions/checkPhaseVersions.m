@@ -59,10 +59,10 @@ cases(end+1) = struct('name', 'halfAng (fusedPhaseLSTM)', 'id', 'halfAng', ...
     'fastDir', fullfile(repDir, 'variants', 'fusedPhaseLSTM'), 'fastCtor', @phaseAwareLSTMFused);
 if ~isempty(o.ids), cases = cases(ismember({cases.id}, o.ids)); end
 
-report = struct('name', {}, 'fwd', {}, 'grad', {}, 'gradDetail', {}, 'seconds', {}, 'train', {}, 'error', {});
-fprintf('\n%-30s %10s %10s %9s  %s\n', 'version', 'fwd', 'grad', 'sec/iter', 'trainNetwork');
+report = struct('name', {}, 'fwd', {}, 'state', {}, 'grad', {}, 'gradDetail', {}, 'seconds', {}, 'train', {}, 'error', {});
+fprintf('\n%-30s %10s %10s %10s %9s  %s\n', 'version', 'fwd (Y)', 'states', 'grad', 'sec/iter', 'trainNetwork');
 for c = cases
-    r = struct('name', c.name, 'fwd', NaN, 'grad', NaN, 'gradDetail', [], 'seconds', NaN, 'train', '', 'error', '');
+    r = struct('name', c.name, 'fwd', NaN, 'state', NaN, 'grad', NaN, 'gradDetail', [], 'seconds', NaN, 'train', '', 'error', '');
     vrow = V(strcmp({V.id}, c.id));
     addpath(c.fastDir, '-begin');
     try
@@ -80,9 +80,15 @@ for c = cases
         w = reshape(sin(1:o.H*B*o.Tcheck), o.H, B, o.Tcheck);
         [yo, so, go] = dlfeval(@lossAndGrads, netO, X, w);
         [yf, sf, gf] = dlfeval(@lossAndGrads, netF, X, w);
-        d = rel(yo, yf);
-        for k = 1:height(so), d = max(d, rel(so.Value{k}, sf.Value{k})); end
-        r.fwd = d;
+        r.fwd = rel(yo, yf);
+        % h and phase states must match; the memory states only where the
+        % original carries memory (no-carry originals return memory = 0)
+        ds = 0;
+        for k = 1:height(so)
+            a = so.Value{k};
+            if any(extractdata(dlarray(a)) ~= 0, 'all'), ds = max(ds, rel(a, sf.Value{k})); end
+        end
+        r.state = ds;
         names = intersect(go.Parameter, gf.Parameter, 'stable');
         gd = struct();
         for k = 1:numel(names)
@@ -104,13 +110,14 @@ for c = cases
     end
     rmpath(c.fastDir);
     if isempty(r.error)
-        fprintf('%-30s %10.2e %10.2e %9.3f  %s\n', r.name, r.fwd, r.grad, r.seconds, r.train);
+        fprintf('%-30s %10.2e %10.2e %10.2e %9.3f  %s\n', r.name, r.fwd, r.state, r.grad, r.seconds, r.train);
     else
         fprintf('%-30s ERROR %s\n', r.name, r.error);
     end
     report(end+1) = r; %#ok<AGROW>
 end
-fprintf('\nExpected: fwd and grad below about 1e-6 (double, %d steps).\n\n', o.Tcheck);
+fprintf(['\nExpected: fwd, states and grad below about 1e-6 (double, %d steps); the half-angle\n' ...
+         'versions reach about 1e-6 to 1e-5 because their recurrence amplifies rounding.\n\n'], o.Tcheck);
 end
 
 function ctor = loadOriginal(v, tmpRoot)
