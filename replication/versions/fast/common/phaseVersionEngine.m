@@ -38,7 +38,7 @@ classdef phaseVersionEngine
             addParameter(p, 'gateEps', false);
             addParameter(p, 'imag', 'tanh');       % 'angle' | 'tanh' | 'polar'
             addParameter(p, 'carry', true);
-            addParameter(p, 'sign', 'none');       % 'none' | 'sum' | 'prod'
+            addParameter(p, 'sign', 'none');       % 'none' | 'sum' | 'prod' | 'realProj' | 'tanhRe'
             addParameter(p, 'hEps', false);
             addParameter(p, 'phMemEps', false);
             addParameter(p, 'phase', 'mem');       % 'mem' | 'OpTimesMem' | 'memPlusOp' | 'memPlusSigmoid'
@@ -48,7 +48,7 @@ classdef phaseVersionEngine
             parse(p, varargin{:}); r = p.Results;
             maps   = {'atan','atanEps','atanPlusEps','piTanh','piSigmoid','direct','halfAngle','atan2QW','atan2WQ','atan2Phantom'};
             imags  = {'angle','tanh','polar'};
-            signs  = {'none','sum','prod'};
+            signs  = {'none','sum','prod','realProj','tanhRe'};
             phases = {'mem','OpTimesMem','memPlusOp','memPlusSigmoid'};
             cfg.mapName = r.map;
             cfg.v = [find(strcmp(maps, r.map)), r.k, r.clip, r.gateEps, ...
@@ -229,14 +229,20 @@ cR = mR + ig * (candR * c2 - candI * s2);
 cI = mI + ig * (candR * s2 + candI * c2);
 mag = sqrt(cR * cR + cI * cI);
 if magFloor > 0, mag = max(mag, magFloor); end
-if signMode == 0
-    sg = 1 + 0 * cR;
-elseif signMode == 1
+sg = 1 + 0 * cR;
+if signMode == 1
     sg = sign(cR + cI);
-else
+elseif signMode == 2
     sg = sign(cR * cI);
 end
-h = o * tanh(sg * mag);
+if signMode == 3                                 % real projection tanh|c| cos(phi)
+    h = 0 * cR;
+    if mag > 0, h = o * tanh(mag) * cR / mag; end
+elseif signMode == 4                             % tanh of the real part
+    h = o * tanh(cR);
+else
+    h = o * tanh(sg * mag);
+end
 if hEps, h = max(h, EPS); end
 phm = atan2(cI, cR + xoff);
 if phMemEps, phm = max(phm, EPS); end
@@ -296,14 +302,21 @@ cR = mR + ig * uR; cI = mI + ig * uI;
 rmag = sqrt(cR * cR + cI * cI);
 mag = rmag;
 if magFloor > 0, mag = max(mag, magFloor); end
-if signMode == 0
-    sg = 1 + 0 * cR;
-elseif signMode == 1
+sg = 1 + 0 * cR;
+if signMode == 1
     sg = sign(cR + cI);
-else
+elseif signMode == 2
     sg = sign(cR * cI);
 end
-tm = tanh(sg * mag);
+tmag = tanh(mag);
+if signMode == 3
+    tm = 0 * cR;
+    if mag > 0, tm = tmag * cR / mag; end
+elseif signMode == 4
+    tm = tanh(cR);
+else
+    tm = tanh(sg * mag);
+end
 hpre = o * tm;
 xr = cR + xoff;
 phraw = atan2(cI, xr);
@@ -323,6 +336,22 @@ end
 if hEps && hpre <= EPS, dh = 0 * dh; end
 dout = dh * tm;
 dmag = dh * o * (1 - tm * tm) * sg;
+dcRo = 0 * dh; dcIo = dcRo;                      % direct output paths (sign modes 3, 4)
+if signMode == 3
+    dmag = 0 * dmag;
+    if mag > 0
+        cs = cR / mag; sn = cI / mag;
+        if magFloor > 0 && rmag < magFloor       % floored: mag is a constant
+            dcRo = dh * o * tmag / mag;
+        else
+            dcRo = dh * o * ((1 - tmag * tmag) * cs * cs + tmag * sn * sn / mag);
+            dcIo = dh * o * ((1 - tmag * tmag) - tmag / mag) * cs * sn;
+        end
+    end
+elseif signMode == 4
+    dmag = 0 * dmag;
+    dcRo = dh * o * (1 - tm * tm);
+end
 if magFloor > 0 && rmag < magFloor, dmag = 0 * dmag; end
 dpp = dph;
 if phOutEps && ppre <= EPS, dpp = 0 * dpp; end
@@ -340,6 +369,7 @@ if phMemEps && phraw <= EPS, dphm = 0 * dphm; end
 if rmag > 0
     dcR = dcR + dmag * cR / rmag; dcI = dcI + dmag * cI / rmag;
 end
+dcR = dcR + dcRo; dcI = dcI + dcIo;
 den = xr * xr + cI * cI;
 if den > 0
     dcR = dcR - dphm * cI / den; dcI = dcI + dphm * xr / den;

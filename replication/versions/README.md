@@ -143,5 +143,27 @@ rotation 60.8 ± 2.3, LSTM projection 57.4 ± 3.7, released with default options
 
 | version | fold 2 val | fold 2 test | min/fold | note |
 |---|---|---|---|---|
-| notrig | | | | |
-| ver5 | | | | |
+| notrig | 70.6 | 61.6 | 6.1 | notrigFastPhaseLSTM |
+| ver5 | 68.7 | 61.2 | 5.6 | ver5FastPhaseLSTM |
+
+## Output-sign study (2026-11-25)
+
+Not original versions: four layers that differ from `piInputPhaseLSTM`
+(released layer + b2 = π on the input rotation, tuned options) **only in
+the output h**. Folders `fast/piSign_<mode>/`, variants `pv_piSign_<mode>`.
+
+| mode | h | note |
+|---|---|---|
+| `none` | o·tanh(\|c\|) | released and paper (eq. 7: only the magnitude goes downstream); control, should match piInputPhaseLSTM |
+| `sum` | o·tanh(sign(Re+Im)·\|c\|) | the sign rule of the early versions |
+| `realProj` | o·tanh(\|c\|)·cos φ | real projection of the polar memory |
+| `tanhRe` | o·tanh(Re c) | tanh of the real part |
+
+Not included: a 2H output [real; imaginary]. The projection's output width
+must equal the source model's input width, so doubling it breaks the transfer.
+
+```matlab
+for m = {'none','sum','realProj','tanhRe'}
+    runReplication('ids', {'cwl_N2_target-domain_DeepRNN_phase-lstm'}, 'folds', 2, 'variant', ['pv_piSign_' m{1}]);
+end
+```
