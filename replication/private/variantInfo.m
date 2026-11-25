@@ -59,6 +59,12 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   tl_<layout>     path    EXTENSION STUDY (not the paper): CWL target-domain
+%                           runs read another two-channel layout,
+%                           datasets/folds/CWL/NEC21_C<n>/targetlayout_<layout>/
+%                           (tl_FzPz, tl_FzPOz, tl_AF3AF4, tl_FzP4; folds built by
+%                           replication/channels/buildTargetLayoutFolds.m);
+%                           combines with the phase-layer variants
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -70,13 +76,22 @@ if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretraine
 names = cellstr(names);
 pvDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'versions', 'fast');
 pvNames = names(startsWith(names, 'pv_'));
+tlNames = names(startsWith(names, 'tl_'));
+for i = 1:numel(tlNames)
+    if ~isfolder(fullfile(fileparts(fileparts(mfilename('fullpath'))), 'variants', tlNames{i}))
+        error('replication:unknownVariant', 'Unknown target layout %s.', tlNames{i});
+    end
+end
+if numel(tlNames) > 1
+    error('replication:variantConflict', 'Use at most one target layout (tl_*).');
+end
 for i = 1:numel(pvNames)
     if ~isfolder(fullfile(pvDir, extractAfter(pvNames{i}, 'pv_'))) || strcmp(pvNames{i}, 'pv_common')
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
 order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions'};
-order = [order, sort(pvNames)];
+order = [order, sort(pvNames), tlNames];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
@@ -123,6 +138,10 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case tlNames
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'targetLayout');
+            v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
+            tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.domain, 'target-domain'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
