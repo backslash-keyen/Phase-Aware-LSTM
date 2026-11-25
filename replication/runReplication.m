@@ -55,6 +55,10 @@ function manifest = runReplication(varargin)
 %                       layer with notrig's clip, biases, options (<id>__halfAngMatchedPhaseLSTM)
 %                       'piInputPhaseLSTM' = released layer, fused, phase bias pi on the
 %                       input rotation + phase-aware options: the minimal fix (<id>__piInputPhaseLSTM)
+%                       'notrigFastPhaseLSTM' / 'ver5FastPhaseLSTM' = fast ports of the
+%                       Nov 2025 notrig layer and of ver5, with the tuned options
+%                       'pv_<version>' = fast port of any of Keyen's phase-layer
+%                       versions (replication/versions/README.md), tuned options
 %                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
@@ -131,10 +135,11 @@ addpath(genpath(fullfile(projectLoc, 'utils')));
 addpath(repDir);
 
 % Variant folders shadow original functions: only the requested one may be on the path
-vroot = fullfile(repDir, 'variants');
-for d = dir(vroot)'
-    if d.isdir && ~startsWith(d.name, '.') && contains(path, fullfile(vroot, d.name))
-        rmpath(fullfile(vroot, d.name));
+for vroot = {fullfile(repDir, 'variants'), fullfile(repDir, 'versions', 'fast')}
+    for d = dir(vroot{1})'
+        if d.isdir && ~startsWith(d.name, '.') && contains(path, fullfile(vroot{1}, d.name))
+            rmpath(fullfile(vroot{1}, d.name));
+        end
     end
 end
 for i = 1:numel(v.dirs)
