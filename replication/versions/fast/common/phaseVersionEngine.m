@@ -73,6 +73,9 @@ classdef phaseVersionEngine
             HPs = cell(1, T+1); CRs = cell(1, T+1); CIs = cell(1, T+1); Ms = cell(1, T);
             HPs{1} = hp; CRs{1} = cR; CIs{1} = cI;
             c = num2cell(cfg.v);
+            if ~isa(WX, 'gpuArray')   % CPU arrayfun does not expand scalars (GPU arrayfun does)
+                c = cellfun(@(s) repmat(cast(s, 'like', WX), H, B), c, 'UniformOutput', false);
+            end
             r = @(A, k) A((k-1)*H+1:k*H, :);
             for t = 1:T
                 M  = R * hp;
@@ -111,6 +114,9 @@ classdef phaseVersionEngine
             dh = dS{1}; dph = dS{2}; dcR = dS{3}; dcI = dS{4};
             isSeq = outputMode == "sequence";
             c = num2cell(cfg.v);
+            if ~isa(WX, 'gpuArray')   % CPU arrayfun does not expand scalars (GPU arrayfun does)
+                c = cellfun(@(s) repmat(cast(s, 'like', WX), H, B), c, 'UniformOutput', false);
+            end
             r = @(A, k) A((k-1)*H+1:k*H, :);
             dWs = cell(1, T); dRs = cell(1, T);
             Rt = R.';

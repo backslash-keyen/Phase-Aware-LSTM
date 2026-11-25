@@ -149,7 +149,7 @@ X = dlarray(Xraw, 'CBT');                  % untraced, as in training
 [Y, S] = forward(net, X, 'Acceleration', 'none');
 Y = stripdims(Y);
 loss = sum(Y .* w, 'all');
-gL = dlgradient(loss, net.Learnables, 'AllowNullGradient', true);
+gL = dlgradient(loss, net.Learnables);
 Y = extractdata(Y);
 end
 
