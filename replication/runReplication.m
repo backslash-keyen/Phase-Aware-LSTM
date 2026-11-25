@@ -47,6 +47,8 @@ function manifest = runReplication(varargin)
 %                       one fused GPU kernel per time step (<id>__fusedPhaseLSTM)
 %                       'signedPhaseLSTM' = DIAGNOSTIC, not the released model:
 %                       version 5 with a signed hidden output (<id>__signedPhaseLSTM)
+%                       'noCarryPhaseLSTM' = DIAGNOSTIC: released layer without
+%                       memory carry, eps clamps as in June 2025 (<id>__noCarryPhaseLSTM)
 %                       At most one of the phase-LSTM speed variants.
 %                       Variants combine: {'authorSource','targetDomain2'}
 %   sourceModelRoot 'M:\Earth\pretrainedModels'  used by authorSource; same
