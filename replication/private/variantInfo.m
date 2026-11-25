@@ -37,6 +37,11 @@ function v = variantInfo(names, sourceModelRoot)
 %                           the June 2025 cstm_arch1 behaviours (no memory
 %                           carry between steps; gates and fed-back phase
 %                           clamped at eps); autodiff, original speed
+%   notrigPhaseLSTM path    REPRODUCTION of the Nov 2025 layer behind the
+%                           paper's CWL phase-lstm results (phaseAwareLSTM_notrig:
+%                           theta = atan(H), clip +-5, unit-forget b1 and b2),
+%                           plus its options routing (CWL C2 PhaseAware options,
+%                           20 target epochs); autodiff, original speed
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -46,17 +51,17 @@ function v = variantInfo(names, sourceModelRoot)
 if nargin < 1 || isempty(names), names = {}; end
 if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretrainedModels'; end
 names = cellstr(names);
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','phaseAwareOptions'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','phaseAwareOptions'};
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if all(ismember({'phaseAwareOptions','targetDomain2'}, names))
-    error('replication:variantConflict', 'phaseAwareOptions and targetDomain2 both replace get_trainingOptions; use one.');
+if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM'}, names)) > 1
+    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2 and notrigPhaseLSTM all replace get_trainingOptions; use one.');
 end
-speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM'};
+speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) > 1
     error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
 end
@@ -86,6 +91,9 @@ for i = 1:numel(names)
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
+        case 'notrigPhaseLSTM'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'notrigPhaseLSTM');
+            tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
