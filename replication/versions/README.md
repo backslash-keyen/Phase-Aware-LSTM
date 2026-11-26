@@ -140,16 +140,43 @@ dedicated ports (notrigFastPhaseLSTM, ver5FastPhaseLSTM, fusedPhaseLSTM).
 
 ## Comparison
 
-Fold-2 screen results go here as they come in (test accuracy, tuned options,
-our own source models). Earlier 10-fold results with PR 2 variants
-(2026-11-25, test): matched half-angle 61.2 ± 2.6, released + π on the input
-rotation 60.8 ± 2.3, LSTM projection 57.4 ± 3.7, released with default options
-51.8 ± 3.4 (7 of 10 folds collapsed).
+Fold-2 screen, all 25 ported versions (2026-11-26, CWL C2 DeepRNN target, Fp1/Fz,
+our own source models, tuned options, MATLAB R2025b, GTX 1650). Test 50.0 = collapsed
+to one class.
 
-| version | fold 2 val | fold 2 test | min/fold | note |
-|---|---|---|---|---|
-| notrig | 70.6 | 61.6 | 6.1 | notrigFastPhaseLSTM |
-| ver5 | 68.7 | 61.2 | 5.6 | ver5FastPhaseLSTM |
+| # | version | val | test | min | |
+|---|---|---|---|---|---|
+| 01 | cstmArch1Mar25 | 67.7 | 62.5 | 13.5 | |
+| 02 | cstmArch2Apr25 | 69.0 | 62.9 | 16.4 | |
+| 03 | cstmArch1Jun25 | 69.2 | 61.6 | 12.4 | |
+| 04 | pal12Oct25 | 71.9 | 62.5 | 12.4 | |
+| 05 | ver1 | 66.5 | 61.3 | 12.4 | |
+| 06 | ver2 | 71.6 | 64.1 | 12.6 | |
+| 07 | ver3 | 70.2 | 63.6 | 12.0 | |
+| 08 | ver4 | 69.3 | 62.7 | 12.4 | |
+| 09 | ver6 | 50.0 | 50.0 | 12.5 | collapsed |
+| 10 | tanh | 50.0 | 50.0 | 12.0 | collapsed |
+| 11 | sigmoid | 51.3 | 50.1 | 12.2 | collapsed |
+| 12 | rotAngle | 50.0 | 50.0 | 12.6 | collapsed |
+| 14 | atan2v1 | 66.4 | 60.9 | 12.4 | |
+| 15 | atan2v2 | 64.1 | 60.4 | 12.5 | |
+| 16 | atan2v3 | 66.4 | 59.6 | 12.7 | |
+| 17 | atan2v4 | 50.0 | 50.0 | 12.8 | collapsed |
+| 18 | atan2v5 | 60.8 | 57.5 | 12.5 | |
+| 19 | pal18Oct25 | 70.0 | 62.8 | 12.3 | |
+| 20 | ver5 | 68.7 | 61.2 | 5.6 | dedicated port |
+| 21 | ver7 | 70.7 | 62.9 | 10.9 | |
+| 22 | ver10M | 65.8 | 58.2 | 12.5 | |
+| 23 | notrigOct25 | 69.3 | 62.8 | 11.7 | |
+| 25 | notrig | 70.6 | 61.6 | 6.1 | dedicated port; the paper's layer |
+| 26 | halfAng | 69.8 | 62.7 | 12.5 | |
+| 27 | halfAngV2 | 50.0 | 50.0 | 13.1 | collapsed |
+
+One fold only: differences of about 2 points are within run-to-run drift (see the
+output-sign control below). Earlier 10-fold results with PR 2 variants
+(2026-11-25, test): matched half-angle 61.2 ± 2.6, released + π on the input
+rotation 60.8 ± 2.3, LSTM projection 57.4 ± 3.7 (fold 2: 54.5), released with
+default options 51.8 ± 3.4 (7 of 10 folds collapsed).
 
 ## Output-sign study (2026-11-25)
 
@@ -173,9 +200,8 @@ The control (none) is the same model as piInputPhaseLSTM, which gave 62.4 test o
 fold 2, so differences of about 2 points between implementations are rounding
 drift over T = 500. One fold does not settle a 4-point gain.
 
-| version (cont.) | fold 2 val | fold 2 test | min/fold | note |
-|---|---|---|---|---|
-| cstmArch1Mar25 | 67.7 | 62.5 | 13.5 | pv_ |
+10 folds (no fold collapsed): realProj test 61.4 ± 2.5 (val 66.4 ± 3.5), tanhRe test 61.6 ± 1.7
+(val 67.3 ± 1.8), against 60.8 ± 2.3 for piInputPhaseLSTM. The sign does not clearly help.
 
 ```matlab
 for m = {'none','sum','realProj','tanhRe'}
