@@ -8,6 +8,7 @@
 | `FzPOz` | Fz, POz | MATB effects largest posteriorly (Hinss 2023, Chu 2022) |
 | `AF3AF4` | AF3, AF4 | anterior frontal, MATB-II (Chandra 2015); weak evidence |
 | `FzP4` | Fz, P4 | fallback if POz is missing |
+| `Fp1Fz` | Fp1, Fz | in-study reference: the paper's pair, cut from the same source folds |
 
 ## Steps (from the repo root, one MATLAB job at a time)
 
@@ -25,3 +26,5 @@ runTargetLayouts('folds', 2)
 The new folds are the same trials, split and labels as the source folds; only the two channel rows differ. The check in step 2 refuses to write anything unless the existing paper target folds are exactly the `{Fp1, Fz}` rows of the source folds under the label file, which validates both the labels and the slicing.
 
 Runs use the opt-in variant `tl_<layout>` (`replication/variants/targetLayout` shadows `perfold_dataset.m` for CWL `target-domain` only; `replication/variants/tl_<layout>/activeTargetLayout.m` names the layout). Everything else is the normal target-domain path: the pretrained DeepRNN source model of each fold, the options and the projection builders. Results are stored apart, as `<id>__tl_<layout>` (LSTM) and `<id>__piInputPhaseLSTM__tl_<layout>` (phase-aware), and the released files and replication defaults are unchanged.
+
+The paper's `targetdomain1` folds (Oct 2025) turned out not to be exact slices of the `fullchannels` folds (Jul 2025): the check fails on fold 1. So the screen also builds `Fp1Fz` from the same source folds (`'check', false`), and every layout, including the reference, uses the source folds' own trials and split.
