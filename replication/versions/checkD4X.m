@@ -9,7 +9,7 @@ function report = checkD4X(varargin)
 %    output, final states and every learnable gradient of the fused layer
 %    against a plain dlarray implementation differentiated by dlgradient
 %    (spectral norm in the reference by 300 power iterations). U and Q are
-%    scaled x1.6 so the spectral normalisation is active, and the biases and
+%    scaled x1.6 (plus noise, so sigma_max is simple) so the normalisation is active, and the biases and
 %    input weights are enlarged so |c| > 1 occurs (the fraction is printed).
 % Expected: rel. differences below about 1e-6.
 p = inputParser;
@@ -69,7 +69,7 @@ for mi = 1:numel(modes)
         for k = 1:height(L)
             v = ex(L.Value{k});
             switch L.Parameter{k}
-                case {'U', 'Q'}, v = 1.6 * v;
+                case {'U', 'Q'}, v = 1.6 * v + 0.3 * randn(size(v));   % distinct singular values (orthogonal init has all equal: sigma_max not differentiable)
                 case {'W1', 'W2'}, v = 3 * v;
                 case {'b1', 'b2'}, v = v + 0.8 * randn(size(v));
             end
