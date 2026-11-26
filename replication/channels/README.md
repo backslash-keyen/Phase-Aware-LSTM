@@ -28,3 +28,9 @@ The new folds are the same trials, split and labels as the source folds; only th
 Runs use the opt-in variant `tl_<layout>` (`replication/variants/targetLayout` shadows `perfold_dataset.m` for CWL `target-domain` only; `replication/variants/tl_<layout>/activeTargetLayout.m` names the layout). Everything else is the normal target-domain path: the pretrained DeepRNN source model of each fold, the options and the projection builders. Results are stored apart, as `<id>__tl_<layout>` (LSTM) and `<id>__piInputPhaseLSTM__tl_<layout>` (phase-aware), and the released files and replication defaults are unchanged.
 
 The paper's `targetdomain1` folds (Oct 2025) turned out not to be exact slices of the `fullchannels` folds (Jul 2025): the check fails on fold 1. So the screen also builds `Fp1Fz` from the same source folds (`'check', false`), and every layout, including the reference, uses the source folds' own trials and split.
+
+## Correction (2026-11-26): use the target subjects
+
+The layouts above (`FzPz`, `FzPOz`, `AF3AF4`, `Fp1Fz`) were cut from the **source** folds, so the projection trained on the same subjects the source model was pretrained on. Their results are not valid for transfer. The real target folds come from `M:\Earth\datasets\helpers\data_perfoldExtraction_NEC21.m` / `dataFeeder_NEC21.m`: for fold i, `rng(i); p = randperm(13)`. Source uses train p(1:4) and val p(5:7). Target uses train p(8:11) and val p(12:13). Both test on subjects 14-15. Each subject is z-scored and winsorized per channel, downsampled 5x, and restricted to classes 0 vs 2.
+
+The `*T` layouts (`tl_Fp1FzT`, `tl_FzPOzT`, `tl_AF3AF4T`) are built with that generator from the raw subject files, with `targetChannel` set to the layout's rows. `Fp1FzT` must reproduce `targetdomain1` exactly before any other layout is used. The reference for comparison is the existing Fp1/Fz target runs.

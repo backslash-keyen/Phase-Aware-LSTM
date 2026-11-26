@@ -62,7 +62,8 @@ function v = variantInfo(names, sourceModelRoot)
 %   tl_<layout>     path    EXTENSION STUDY (not the paper): CWL target-domain
 %                           runs read another two-channel layout,
 %                           datasets/folds/CWL/NEC21_C<n>/targetlayout_<layout>/
-%                           (tl_FzPz, tl_FzPOz, tl_AF3AF4, tl_FzP4, tl_Fp1Fz; folds built by
+%                           (tl_FzPOzT, tl_AF3AF4T, tl_Fp1FzT = target subjects;
+%                           tl_FzPz, tl_FzPOz, tl_AF3AF4, tl_Fp1Fz = INVALID, source subjects; folds built by
 %                           replication/channels/buildTargetLayoutFolds.m);
 %                           combines with the phase-layer variants
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
