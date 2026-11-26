@@ -9,6 +9,7 @@ for k = numel(out)+1:n
     out{k} = zeros(H, B, 'like', g.X);
 end
 out = out(1:n);
+if exist('capPhaseGrads', 'file') == 2, out = capPhaseGrads(out); end   % 'gradCap' variant: overflow-safe clip
 for k = 1:numel(out)
     if isa(out{k}, 'dlarray'), continue; end
     if k == 1 && isa(X, 'dlarray') && ~isempty(dims(X))

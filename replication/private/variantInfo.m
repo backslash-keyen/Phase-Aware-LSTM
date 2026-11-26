@@ -59,6 +59,11 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   gradCap         path    FIX: the fast phase layers' backward rescales each learnable
+%                           gradient to L2 norm <= 1.25 in double (capPhaseGrads), so
+%                           trainNetwork's single-precision l2norm clip no longer overflows
+%                           to a zero update (the projection otherwise never trains);
+%                           combine with any fast phase-layer variant
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -75,7 +80,7 @@ for i = 1:numel(pvNames)
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','gradCap'};
 order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
@@ -127,6 +132,9 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
                 strcmpi(k.layerName, 'phase-lstm') && startsWith(lower(k.domain), 'target'); %#ok<AGROW>
+        case 'gradCap'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'gradCap');
+            tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM'}
             v.dirs{end+1} = fullfile(repDir, 'variants', names{i});
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>

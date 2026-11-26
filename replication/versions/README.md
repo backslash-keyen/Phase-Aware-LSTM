@@ -138,6 +138,43 @@ trainNetwork runs for every one. One forward+backward at H 30, B 197, T 500
 takes about 1.5 to 2.8 s with the shared engine and about 0.6 s with the
 dedicated ports (notrigFastPhaseLSTM, ver5FastPhaseLSTM, fusedPhaseLSTM).
 
+## New version: crossFeed (Nov 2026)
+
+Not one of Keyen's historical layers: a new design on top of the matched
+half-angle layer d4 (`variants/halfAngMatchedPhaseLSTM`, clip +-5, b1 = b2 =
+unit-forget, tuned CWL C2 PhaseAware options). The only change is that the
+magnitude and phase paths of the recurrence see each other:
+
+| version | variant | magnitude gates f i g o | phase gates theta_f theta_i g_im |
+|---|---|---|---|
+| d4 (baseline) | `halfAngMatchedPhaseLSTM` | W1 x + U h + b1 | W2 x + Q phi + b2 |
+| crossFeed | `pv_crossFeed` | W1 x + U h + **Vm [cos phi; sin phi]** + b1 | W2 x + Q phi + **Vp h** + b2 |
+| crossFeedMag (one-way) | `pv_crossFeedMag` | W1 x + U h + **Vm [cos phi; sin phi]** + b1 | W2 x + Q phi + b2 |
+
+h = o.*tanh(|c|) is the fed-back magnitude and phi = atan2(Im c, Re c) the
+fed-back phase, both as in d4. The phase reaches the magnitude gates as
+cos phi and sin phi, so there is no 2 pi jump at the atan2 branch cut.
+Vm [4H x 2H] and Vp [3H x H] start at zero, so at initialisation both
+versions compute exactly what d4 computes, and every other learnable gets
+d4's random draws. In crossFeedMag, Vp is held at zero (zero gradient).
+
+One class, `fast/common/phaseAwareLSTMCrossFeed.m` (`CrossMode` "both" or
+"magOnly"): d4's fused GPU kernels unchanged, with the cross terms in the
+stacked recurrent matrix acting on z = [h; phi; cos phi; sin phi], and a
+hand-written backward (CPU and GPU).
+
+Check (`checkCrossFeed`, a few minutes, trains nothing): with zero cross
+weights the layer equals d4 (same learnables, output and gradients); with
+random cross weights the output, final states and every gradient match a
+plain dlarray implementation differentiated by `dlgradient`, CPU and GPU,
+double precision, both modes, OutputMode sequence and last.
+
+```matlab
+addpath('replication/versions'); checkCrossFeed();
+addpath('replication');
+runReplication('ids', {'cwl_N2_target-domain_DeepRNN_phase-lstm'}, 'folds', 2, 'variant', 'pv_crossFeed');
+```
+
 ## Comparison
 
 Fold-2 screen, all 25 ported versions (2026-11-26, CWL C2 DeepRNN target, Fp1/Fz,
