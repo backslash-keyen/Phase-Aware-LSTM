@@ -9,10 +9,13 @@ function info = buildPipelineLayoutFolds(varargin)
 %   target subjects p(8:13) (train p(8:11), val p(12:13))
 %   test subjects   14, 15  (both domains)
 % Each subject is z-scored and winsorized per channel over all 61 channels,
-% then the selected channels are kept and the data are downsampled by 5.
-% This function calls that same class (read-only from M:) with
-% targetChannel set to a layout's source rows, so the new folds have the
-% target subjects, split and preprocessing of the paper's target folds.
+% then the selected channels are kept. The current M: copy of the class
+% (1 Nov 2025) then downsamples by 5, but the paper's targetdomain1 folds
+% (14 Oct 2025) have all 500 samples, so this function replays the
+% generator's steps without that downsampling (feedFolds below), using the
+% class's own static preprocess_givenData (read-only from M:). The new
+% folds then have the target subjects, split and preprocessing of the
+% paper's target folds, and the Fp1FzT isequal gate proves it.
 %
 % Order and safety:
 %   1. prints the subject table for folds 1..ncval and asserts that the
@@ -70,7 +73,7 @@ fprintf('[pipeline] source, target and test subjects are disjoint in all %d fold
 
 % 2. Fp1FzT, checked against the paper's target folds
 info = table();
-info = [info; buildLayouts(config, ec, base, {'Fp1FzT', [1 2]}, subj, o.force)];
+info = [info; buildLayouts(config, ec, base, {'Fp1FzT', [1 2]}, subj, true)];   % always rebuilt, so the gate never checks stale files;
 allOk = true;
 for i = 1:o.ncval
     A = load(fullfile(base, 'targetlayout_Fp1FzT', sprintf('target_fold%d.mat', i)));
@@ -111,9 +114,8 @@ for j = 1:size(L,1)
 end
 rowsAll = unique([L{:,2}], 'stable');
 if any(todo)
-    ec.targetChannel = rowsAll;
-    fprintf('[pipeline] dataFeeder_NEC21 target-domain, channels %s\n', mat2str(rowsAll));
-    [~, feeds] = dataFeeder_NEC21(config, ec);
+    fprintf('[pipeline] target-domain folds (Oct-2025 generator, no downsampling), channels %s\n', mat2str(rowsAll));
+    feeds = feedFolds(config, ec, rowsAll, subj);
 end
 info = table();
 for j = 1:size(L,1)
@@ -142,6 +144,46 @@ for j = 1:size(L,1)
     writetable(info(info.layout == L{j,1}, :), fullfile(outDirs{j}, 'layout_info.csv'));
 end
 clear feeds
+end
+
+function feeds = feedFolds(config, ec, rows, subj)
+% Same steps as dataFeeder_NEC21.get_dataset / load_singleSubject, as the
+% generator was when targetdomain1 was written (14 Oct 2025): the current
+% M: copy (1 Nov 2025) adds "x = pagetranspose(downsample(pagetranspose(x),5))",
+% which the 500-sample paper folds do not have. Per-subject preprocessing
+% uses the class's own static preprocess_givenData. Each subject file is
+% loaded once and cached (selected rows only); the isequal check against
+% targetdomain1 proves the replica.
+cache = containers.Map('KeyType', 'double', 'ValueType', 'any');
+    function [x, y] = subjectData(s)
+        if ~isKey(cache, s)
+            fprintf('[pipeline] loading subject %d\n', s);
+            d = load(fullfile(config.dataLoc, sprintf('subject_%d', s)), 't_trainingset', 't_testset', 'trainingbin', 'testbin');
+            a = dataFeeder_NEC21.preprocess_givenData(d.t_trainingset);
+            b = dataFeeder_NEC21.preprocess_givenData(d.t_testset);
+            xs = cat(3, a(rows,:,:), b(rows,:,:));
+            y0 = cat(1, d.trainingbin, d.testbin);
+            clear d a b
+            if ec.ncategories == 2
+                xs(:,:,y0==1) = [];
+                y0(y0==1) = [];
+            end
+            cache(s) = struct('x', xs, 'y', categorical(y0));
+        end
+        c = cache(s); x = c.x; y = c.y;
+    end
+    function [x, y] = pooled(subs)
+        x = []; y = [];
+        for s = subs
+            [xt, yt] = subjectData(s);
+            x = cat(3, x, xt); y = cat(1, y, yt);
+        end
+    end
+for i = 1:ec.ncval
+    [feeds(i).xtrain, feeds(i).ytrain] = pooled(subj(i).tgtTrain); %#ok<AGROW>
+    [feeds(i).xval,   feeds(i).yval]   = pooled(subj(i).tgtVal);   %#ok<AGROW>
+    [feeds(i).xtest,  feeds(i).ytest]  = pooled(subj(i).test);     %#ok<AGROW>
+end
 end
 
 function subj = subjectTable(ncval)
