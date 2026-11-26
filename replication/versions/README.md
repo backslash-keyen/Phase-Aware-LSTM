@@ -130,18 +130,81 @@ original to about 1e-9 (tanh 6e-7 and rotAngle 8e-8, where the recurrence is
 very sensitive at large weight scale). halfAngV2 was checked at batch size 1
 because the original only runs there.
 
-Still to check on the PC with MATLAB R2025b: `checkPhaseVersions` (dlnetwork,
-GPU kernel, trainNetwork path, timing at H 30, B 197, T 500).
+On the PC (MATLAB R2025b, GTX 1650, 2026-11-25), `checkPhaseVersions`: the
+output Y matches the original for all 28 cases (most about 1e-14, tanh 3e-8,
+notrigOct25 3e-9, halfAng 4e-7, halfAngV2 9e-6), the gradients to 1e-11 or
+better except tanh 5e-7, notrigOct25 3e-8, halfAng 2e-6 and halfAngV2 5e-5, and
+trainNetwork runs for every one. One forward+backward at H 30, B 197, T 500
+takes about 1.5 to 2.8 s with the shared engine and about 0.6 s with the
+dedicated ports (notrigFastPhaseLSTM, ver5FastPhaseLSTM, fusedPhaseLSTM).
 
 ## Comparison
 
-Fold-2 screen results go here as they come in (test accuracy, tuned options,
-our own source models). Earlier 10-fold results with PR 2 variants
-(2026-11-25, test): matched half-angle 61.2 ± 2.6, released + π on the input
-rotation 60.8 ± 2.3, LSTM projection 57.4 ± 3.7, released with default options
-51.8 ± 3.4 (7 of 10 folds collapsed).
+Fold-2 screen, all 25 ported versions (2026-11-26, CWL C2 DeepRNN target, Fp1/Fz,
+our own source models, tuned options, MATLAB R2025b, GTX 1650). Test 50.0 = collapsed
+to one class.
 
-| version | fold 2 val | fold 2 test | min/fold | note |
-|---|---|---|---|---|
-| notrig | | | | |
-| ver5 | | | | |
+| # | version | val | test | min | |
+|---|---|---|---|---|---|
+| 01 | cstmArch1Mar25 | 67.7 | 62.5 | 13.5 | |
+| 02 | cstmArch2Apr25 | 69.0 | 62.9 | 16.4 | |
+| 03 | cstmArch1Jun25 | 69.2 | 61.6 | 12.4 | |
+| 04 | pal12Oct25 | 71.9 | 62.5 | 12.4 | |
+| 05 | ver1 | 66.5 | 61.3 | 12.4 | |
+| 06 | ver2 | 71.6 | 64.1 | 12.6 | |
+| 07 | ver3 | 70.2 | 63.6 | 12.0 | |
+| 08 | ver4 | 69.3 | 62.7 | 12.4 | |
+| 09 | ver6 | 50.0 | 50.0 | 12.5 | collapsed |
+| 10 | tanh | 50.0 | 50.0 | 12.0 | collapsed |
+| 11 | sigmoid | 51.3 | 50.1 | 12.2 | collapsed |
+| 12 | rotAngle | 50.0 | 50.0 | 12.6 | collapsed |
+| 14 | atan2v1 | 66.4 | 60.9 | 12.4 | |
+| 15 | atan2v2 | 64.1 | 60.4 | 12.5 | |
+| 16 | atan2v3 | 66.4 | 59.6 | 12.7 | |
+| 17 | atan2v4 | 50.0 | 50.0 | 12.8 | collapsed |
+| 18 | atan2v5 | 60.8 | 57.5 | 12.5 | |
+| 19 | pal18Oct25 | 70.0 | 62.8 | 12.3 | |
+| 20 | ver5 | 68.7 | 61.2 | 5.6 | dedicated port |
+| 21 | ver7 | 70.7 | 62.9 | 10.9 | |
+| 22 | ver10M | 65.8 | 58.2 | 12.5 | |
+| 23 | notrigOct25 | 69.3 | 62.8 | 11.7 | |
+| 25 | notrig | 70.6 | 61.6 | 6.1 | dedicated port; the paper's layer |
+| 26 | halfAng | 69.8 | 62.7 | 12.5 | |
+| 27 | halfAngV2 | 50.0 | 50.0 | 13.1 | collapsed |
+
+One fold only: differences of about 2 points are within run-to-run drift (see the
+output-sign control below). Earlier 10-fold results with PR 2 variants
+(2026-11-25, test): matched half-angle 61.2 ± 2.6, released + π on the input
+rotation 60.8 ± 2.3, LSTM projection 57.4 ± 3.7 (fold 2: 54.5), released with
+default options 51.8 ± 3.4 (7 of 10 folds collapsed).
+
+## Output-sign study (2026-11-25)
+
+Not original versions: four layers that differ from `piInputPhaseLSTM`
+(released layer + b2 = π on the input rotation, tuned options) **only in
+the output h**. Folders `fast/piSign_<mode>/`, variants `pv_piSign_<mode>`.
+
+| mode | h | note |
+|---|---|---|
+| `none` | o·tanh(\|c\|) | released and paper (eq. 7: only the magnitude goes downstream); control, should match piInputPhaseLSTM |
+| `sum` | o·tanh(sign(Re+Im)·\|c\|) | the sign rule of the early versions |
+| `realProj` | o·tanh(\|c\|)·cos φ | real projection of the polar memory |
+| `tanhRe` | o·tanh(Re c) | tanh of the real part |
+
+Not included: a 2H output [real; imaginary]. The projection's output width
+must equal the source model's input width, so doubling it breaks the transfer.
+
+Fold 2 (2026-11-25, tuned options, our source models), val / test, about 13 min each:
+none 65.9 / 60.0, sum 67.2 / 61.2, realProj 70.0 / 64.0, tanhRe 68.3 / 64.1, none collapsed.
+The control (none) is the same model as piInputPhaseLSTM, which gave 62.4 test on
+fold 2, so differences of about 2 points between implementations are rounding
+drift over T = 500. One fold does not settle a 4-point gain.
+
+10 folds (no fold collapsed): realProj test 61.4 ± 2.5 (val 66.4 ± 3.5), tanhRe test 61.6 ± 1.7
+(val 67.3 ± 1.8), against 60.8 ± 2.3 for piInputPhaseLSTM. The sign does not clearly help.
+
+```matlab
+for m = {'none','sum','realProj','tanhRe'}
+    runReplication('ids', {'cwl_N2_target-domain_DeepRNN_phase-lstm'}, 'folds', 2, 'variant', ['pv_piSign_' m{1}]);
+end
+```
