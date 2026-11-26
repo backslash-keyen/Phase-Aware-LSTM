@@ -164,3 +164,8 @@ runAll('variant',{'authorSource','targetDomain2'},'datasets','CWL','ncats',2,'ty
 | `buildTables.m` | Tables (.csv, .md, .tex) and paired t-tests |
 | `runAll.m`, `../replicatePaper.m` | One-call entry points |
 | `private/` | Helpers: path mirrors of the original loaders, hashing, t-test |
+
+
+## Extension: other CWL target channel layouts
+
+Not part of the replication. `replication/channels/` builds and screens other two-channel CWL target layouts (Fz–Pz, Fz–POz, AF3–AF4) through the opt-in variants `tl_<layout>`; see `replication/channels/README.md`.

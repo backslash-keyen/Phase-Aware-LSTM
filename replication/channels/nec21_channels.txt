@@ -1,0 +1,70 @@
+% NEC21 (Neuroergonomics 2021 pBCI hackathon) EEG montage, one label per
+% source-fold row (61 rows). From the dataset's chan_locs_standard
+% (Zenodo 10.5281/zenodo.5055046; 62 EEG labels + 3 fiducials) with TP10
+% removed: TP10 is the right-mastoid reference (Roy et al. 2022), and of all
+% 62 single-channel removals it is the one whose channel correlations best
+% follow scalp distance on the demo fold (Spearman -0.884; next CP6 -0.877).
+% Every top candidate lies at row 13-21, so Pz (12), AF3 (32), POz (46) and
+% AF4 (60) map the same either way. buildTargetLayoutFolds checks rows
+% {Fp1,Fz} and {F3,F7} against the paper's target folds.
+Fp1
+Fz
+F3
+F7
+FT9
+FC5
+FC1
+C3
+T7
+CP5
+CP1
+Pz
+P3
+P7
+O1
+Oz
+O2
+P4
+P8
+CP6
+CP2
+FCz
+C4
+T8
+FT8
+FC6
+FC2
+F4
+F8
+Fp2
+AF7
+AF3
+AFz
+F1
+F5
+FT7
+FC3
+C1
+C5
+TP7
+CP3
+P1
+P5
+PO7
+PO3
+POz
+PO4
+PO8
+P6
+P2
+CPz
+CP4
+TP8
+C6
+C2
+FC4
+FT10
+F6
+AF8
+AF4
+F2
