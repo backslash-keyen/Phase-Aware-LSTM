@@ -343,6 +343,7 @@ function out = wrapGrads(out, X)
 % trainNetwork's legacy custom-layer path (CustomLayerLegacyStrategy) calls
 % extractdata on every output of backward(), so return dlarrays; dlnetwork
 % accepts them too. dLdX keeps the format of X.
+if exist('capPhaseGrads', 'file') == 2, out = capPhaseGrads(out); end   % 'gradCap' variant: overflow-safe clip
 for k = 1:numel(out)
     if isa(out{k}, 'dlarray'), continue; end
     if k == 1 && isa(X, 'dlarray') && ~isempty(dims(X))
