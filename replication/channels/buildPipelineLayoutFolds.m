@@ -1,0 +1,157 @@
+function info = buildPipelineLayoutFolds(varargin)
+%BUILDPIPELINELAYOUTFOLDS  Build CWL target folds for other channel pairs with the pipeline's own generator.
+%
+% Extension study only. The paper's target folds (targetdomain1, Fp1-Fz) were
+% made by M:\Earth\datasets\helpers\data_perfoldExtraction_NEC21.m, which
+% calls dataFeeder_NEC21 with domain 'target-domain'. For fold i that class
+% runs rng(i); p = randperm(13) and uses
+%   source subjects p(1:7)  (train p(1:4),  val p(5:7))
+%   target subjects p(8:13) (train p(8:11), val p(12:13))
+%   test subjects   14, 15  (both domains)
+% Each subject is z-scored and winsorized per channel over all 61 channels,
+% then the selected channels are kept and the data are downsampled by 5.
+% This function calls that same class (read-only from M:) with
+% targetChannel set to a layout's source rows, so the new folds have the
+% target subjects, split and preprocessing of the paper's target folds.
+%
+% Order and safety:
+%   1. prints the subject table for folds 1..ncval and asserts that the
+%      source, target and test subjects are disjoint;
+%   2. builds Fp1FzT ([1 2]) and checks with isequal that every variable of
+%      every fold equals targetdomain1/target_fold<i>.mat. If any fold
+%      differs it stops with an error and nothing else is built;
+%   3. builds the other layouts in one pass over the union of their rows
+%      (exact, since normalisation and winsorizing are per channel).
+% Output: datasets/folds/CWL/NEC21_C2/targetlayout_<name>/target_fold<i>.mat
+% (xtrain xval xtest ytrain yval ytest, -v7.3 like the pipeline, written via
+% a tmp file + rename) and layout_info.csv with the subjects per fold.
+%
+%   addpath replication/channels
+%   info = buildPipelineLayoutFolds();
+%   info = buildPipelineLayoutFolds('layouts', {'FzPOzT', [2 46]});
+
+p = inputParser;
+addParameter(p, 'projectLoc', fileparts(fileparts(fileparts(mfilename('fullpath')))));
+addParameter(p, 'earthLoc', 'M:\Earth');
+addParameter(p, 'layouts', {'FzPOzT', [2 46]; 'AF3AF4T', [32 60]});
+addParameter(p, 'ncats', 2);
+addParameter(p, 'ncval', 10);
+addParameter(p, 'force', false);
+parse(p, varargin{:}); o = p.Results;
+
+helpers = fullfile(o.earthLoc, 'datasets', 'helpers');
+prep    = fullfile(o.earthLoc, 'datasets', 'preprocessing');
+addpath(helpers, prep);                    % read-only use; nothing is written to M:
+assert(exist('dataFeeder_NEC21', 'file') == 2, 'dataFeeder_NEC21 not found in %s', helpers);
+
+config.projectLoc = o.earthLoc;
+config.dataLoc = fullfile(o.earthLoc, 'datasets', 'matfiles', 'CWL', 'NEC21');
+ec.ncval = o.ncval;
+ec.sourceChannel = 1:61;
+ec.dataset = 'CWL';
+ec.ncategories = o.ncats;
+ec.domain = 'target-domain';
+
+base = fullfile(o.projectLoc, 'datasets', 'folds', 'CWL', sprintf('NEC21_C%d', o.ncats));
+refDir = fullfile(base, 'targetdomain1');
+
+% 1. subject table (same code as dataFeeder_NEC21.get_subjectIndices)
+subj = subjectTable(o.ncval);
+fprintf('[pipeline] fold | source train | source val | target train | target val | test\n');
+for i = 1:o.ncval
+    s = subj(i);
+    fprintf('[pipeline] %4d | %-12s | %-10s | %-12s | %-10s | %s\n', i, num2str(s.srcTrain), num2str(s.srcVal), ...
+        num2str(s.tgtTrain), num2str(s.tgtVal), num2str(s.test));
+    src = [s.srcTrain s.srcVal]; tgt = [s.tgtTrain s.tgtVal];
+    assert(isempty(intersect(src, tgt)) && isempty(intersect(src, s.test)) && isempty(intersect(tgt, s.test)), ...
+        'buildPipelineLayoutFolds:subjects', 'Fold %d: source, target and test subjects overlap.', i);
+end
+fprintf('[pipeline] source, target and test subjects are disjoint in all %d folds\n', o.ncval);
+
+% 2. Fp1FzT, checked against the paper's target folds
+info = table();
+info = [info; buildLayouts(config, ec, base, {'Fp1FzT', [1 2]}, subj, o.force)];
+allOk = true;
+for i = 1:o.ncval
+    A = load(fullfile(base, 'targetlayout_Fp1FzT', sprintf('target_fold%d.mat', i)));
+    R = load(fullfile(refDir, sprintf('target_fold%d.mat', i)));
+    vars = {'xtrain','xval','xtest','ytrain','yval','ytest'};
+    ok = true;
+    for v = vars
+        same = isequal(A.(v{1}), R.(v{1})) && strcmp(class(A.(v{1})), class(R.(v{1})));
+        if ~same
+            fprintf('[pipeline] fold %d: %s differs (size %s vs %s, class %s vs %s)\n', i, v{1}, ...
+                mat2str(size(A.(v{1}))), mat2str(size(R.(v{1}))), class(A.(v{1})), class(R.(v{1})));
+        end
+        ok = ok && same;
+    end
+    fprintf('[pipeline] fold %d: Fp1FzT == targetdomain1 (all 6 variables): %s\n', i, mat2str(ok));
+    allOk = allOk && ok;
+    clear A R
+end
+if ~allOk
+    error('buildPipelineLayoutFolds:check', 'Fp1FzT does not reproduce targetdomain1; no other layout built.');
+end
+fprintf('[pipeline] CHECK PASSED: Fp1FzT reproduces targetdomain1 in all %d folds\n', o.ncval);
+
+% 3. other layouts, one pass over the union of their rows
+if ~isempty(o.layouts)
+    info = [info; buildLayouts(config, ec, base, o.layouts, subj, o.force)];
+end
+fprintf('[pipeline] done\n');
+end
+
+function info = buildLayouts(config, ec, base, L, subj, force)
+outDirs = cellfun(@(n) fullfile(base, ['targetlayout_' n]), L(:,1), 'UniformOutput', false);
+todo = false(size(L,1), 1);
+for j = 1:size(L,1)
+    for i = 1:ec.ncval
+        todo(j) = todo(j) || force || ~isfile(fullfile(outDirs{j}, sprintf('target_fold%d.mat', i)));
+    end
+end
+rowsAll = unique([L{:,2}], 'stable');
+if any(todo)
+    ec.targetChannel = rowsAll;
+    fprintf('[pipeline] dataFeeder_NEC21 target-domain, channels %s\n', mat2str(rowsAll));
+    [~, feeds] = dataFeeder_NEC21(config, ec);
+end
+info = table();
+for j = 1:size(L,1)
+    if ~isfolder(outDirs{j}), mkdir(outDirs{j}); end
+    [~, k] = ismember(L{j,2}, rowsAll);
+    for i = 1:ec.ncval
+        outFile = fullfile(outDirs{j}, sprintf('target_fold%d.mat', i));
+        if todo(j) && (force || ~isfile(outFile))
+            % same conversions as data_perfold_extractANDsave.m
+            xtrain = feeds(i).xtrain(k,:,:); xval = feeds(i).xval(k,:,:); xtest = feeds(i).xtest(k,:,:); %#ok<NASGU>
+            ytrain = double(feeds(i).ytrain); yval = double(feeds(i).yval); ytest = double(feeds(i).ytest); %#ok<NASGU>
+            tmp = [outFile '.tmp.mat'];
+            save(tmp, 'xtrain', 'xval', 'xtest', 'ytrain', 'yval', 'ytest', '-v7.3');
+            movefile(tmp, outFile, 'f');
+            clear xtrain xval xtest ytrain yval ytest
+            fprintf('[pipeline] %s fold %d -> %s\n', L{j,1}, i, outFile);
+        else
+            fprintf('[pipeline] %s fold %d exists, skipped\n', L{j,1}, i);
+        end
+        s = subj(i);
+        row = table(string(L{j,1}), i, L{j,2}(1), L{j,2}(2), string(num2str(s.tgtTrain)), string(num2str(s.tgtVal)), ...
+            string(num2str(s.test)), string(num2str([s.srcTrain s.srcVal])), ...
+            'VariableNames', {'layout','fold','row1','row2','targetTrainSubjects','targetValSubjects','testSubjects','sourceSubjects'});
+        info = [info; row]; %#ok<AGROW>
+    end
+    writetable(info(info.layout == L{j,1}, :), fullfile(outDirs{j}, 'layout_info.csv'));
+end
+clear feeds
+end
+
+function subj = subjectTable(ncval)
+% copy of dataFeeder_NEC21.get_subjectIndices (13 pooled subjects, 14-15 reserved for test)
+totalSubs = 13;
+for i = 1:ncval
+    rng(i);
+    pp = randperm(totalSubs, totalSubs);
+    subj(i).srcTrain = pp(1:4); subj(i).srcVal = pp(5:7);   %#ok<AGROW> floor(7*0.7)=4, ceil(7*0.3)=3
+    subj(i).tgtTrain = pp(8:11); subj(i).tgtVal = pp(12:13); %#ok<AGROW> floor(6*0.7)=4, ceil(6*0.3)=2
+    subj(i).test = [14 15]; %#ok<AGROW>
+end
+end
