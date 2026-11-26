@@ -40,6 +40,8 @@ addParameter(p, 'layouts', {'FzPOzT', [2 46]; 'AF3AF4T', [32 60]});
 addParameter(p, 'ncats', 2);
 addParameter(p, 'ncval', 10);
 addParameter(p, 'force', false);
+addParameter(p, 'prepOrder', 'A');   % A..F, see feedFolds (A = per-session prep over 61 ch, as in the M: class)
+addParameter(p, 'tol', 0);           % gate tolerance on x (max abs diff); 0 = isequal. Labels are always isequal.
 parse(p, varargin{:}); o = p.Results;
 
 helpers = fullfile(o.earthLoc, 'datasets', 'helpers');
@@ -54,6 +56,8 @@ ec.sourceChannel = 1:61;
 ec.dataset = 'CWL';
 ec.ncategories = o.ncats;
 ec.domain = 'target-domain';
+ec.prepOrder = upper(o.prepOrder);
+fprintf('[pipeline] prepOrder %s, gate tol %g\n', ec.prepOrder, o.tol);
 
 base = fullfile(o.projectLoc, 'datasets', 'folds', 'CWL', sprintf('NEC21_C%d', o.ncats));
 refDir = fullfile(base, 'targetdomain1');
@@ -74,28 +78,41 @@ fprintf('[pipeline] source, target and test subjects are disjoint in all %d fold
 % 2. Fp1FzT, checked against the paper's target folds
 info = table();
 info = [info; buildLayouts(config, ec, base, {'Fp1FzT', [1 2]}, subj, true)];   % always rebuilt, so the gate never checks stale files;
-allOk = true;
+allOk = true; maxDiff = nan(o.ncval, 1);
 for i = 1:o.ncval
     A = load(fullfile(base, 'targetlayout_Fp1FzT', sprintf('target_fold%d.mat', i)));
     R = load(fullfile(refDir, sprintf('target_fold%d.mat', i)));
     vars = {'xtrain','xval','xtest','ytrain','yval','ytest'};
-    ok = true;
+    ok = true; md = 0;
     for v = vars
-        same = isequal(A.(v{1}), R.(v{1})) && strcmp(class(A.(v{1})), class(R.(v{1})));
+        a = A.(v{1}); r = R.(v{1});
+        same = isequal(a, r) && strcmp(class(a), class(r));
+        if isequal(size(a), size(r)) && strcmp(class(a), class(r))
+            dv = max(abs(double(a(:)) - double(r(:)))); if isempty(dv), dv = 0; end
+            if startsWith(v{1}, 'x'), md = max(md, dv); end
+            if ~same && o.tol > 0 && startsWith(v{1}, 'x') && dv <= o.tol, same = true; end
+            fprintf('[pipeline] fold %d: %s max abs diff %.3g\n', i, v{1}, dv);
+        end
+        clear a r
         if ~same
             fprintf('[pipeline] fold %d: %s differs (size %s vs %s, class %s vs %s)\n', i, v{1}, ...
                 mat2str(size(A.(v{1}))), mat2str(size(R.(v{1}))), class(A.(v{1})), class(R.(v{1})));
         end
         ok = ok && same;
     end
-    fprintf('[pipeline] fold %d: Fp1FzT == targetdomain1 (all 6 variables): %s\n', i, mat2str(ok));
+    maxDiff(i) = md;
+    fprintf('[pipeline] fold %d: Fp1FzT == targetdomain1 (all 6 variables, x tol %g): %s\n', i, o.tol, mat2str(ok));
     allOk = allOk && ok;
     clear A R
 end
 if ~allOk
     error('buildPipelineLayoutFolds:check', 'Fp1FzT does not reproduce targetdomain1; no other layout built.');
 end
-fprintf('[pipeline] CHECK PASSED: Fp1FzT reproduces targetdomain1 in all %d folds\n', o.ncval);
+fprintf('[pipeline] CHECK PASSED: Fp1FzT reproduces targetdomain1 in all %d folds (x tol %g, max x diff %.3g)\n', o.ncval, o.tol, max(maxDiff));
+csv = fullfile(base, 'targetlayout_Fp1FzT', 'layout_info.csv');
+T = readtable(csv);
+T.maxAbsDiffVsTargetdomain1 = maxDiff(T.fold); T.gateTol = repmat(o.tol, height(T), 1);
+writetable(T, csv);
 
 % 3. other layouts, one pass over the union of their rows
 if ~isempty(o.layouts)
@@ -137,8 +154,8 @@ for j = 1:size(L,1)
         end
         s = subj(i);
         row = table(string(L{j,1}), i, L{j,2}(1), L{j,2}(2), string(num2str(s.tgtTrain)), string(num2str(s.tgtVal)), ...
-            string(num2str(s.test)), string(num2str([s.srcTrain s.srcVal])), ...
-            'VariableNames', {'layout','fold','row1','row2','targetTrainSubjects','targetValSubjects','testSubjects','sourceSubjects'});
+            string(num2str(s.test)), string(num2str([s.srcTrain s.srcVal])), string(ec.prepOrder), ...
+            'VariableNames', {'layout','fold','row1','row2','targetTrainSubjects','targetValSubjects','testSubjects','sourceSubjects','prepOrder'});
         info = [info; row]; %#ok<AGROW>
     end
     writetable(info(info.layout == L{j,1}, :), fullfile(outDirs{j}, 'layout_info.csv'));
@@ -159,15 +176,36 @@ cache = containers.Map('KeyType', 'double', 'ValueType', 'any');
         if ~isKey(cache, s)
             fprintf('[pipeline] loading subject %d\n', s);
             d = load(fullfile(config.dataLoc, sprintf('subject_%d', s)), 't_trainingset', 't_testset', 'trainingbin', 'testbin');
-            a = dataFeeder_NEC21.preprocess_givenData(d.t_trainingset);
-            b = dataFeeder_NEC21.preprocess_givenData(d.t_testset);
-            xs = cat(3, a(rows,:,:), b(rows,:,:));
-            y0 = cat(1, d.trainingbin, d.testbin);
-            clear d a b
-            if ec.ncategories == 2
-                xs(:,:,y0==1) = [];
-                y0(y0==1) = [];
+            P = @(x) dataFeeder_NEC21.preprocess_givenData(x);
+            ya = d.trainingbin; yb = d.testbin; y0 = cat(1, ya, yb);
+            drop = ec.ncategories == 2;
+            switch ec.prepOrder
+                case 'A'   % per-session prep over 61 ch, select rows, pool, drop class 1 (M: class)
+                    a = P(d.t_trainingset); b = P(d.t_testset); xs = cat(3, a(rows,:,:), b(rows,:,:));
+                    if drop, xs(:,:,y0==1) = []; end
+                case 'B'   % pool sessions, prep, select, drop
+                    ab = P(cat(3, d.t_trainingset, d.t_testset)); xs = ab(rows,:,:);
+                    if drop, xs(:,:,y0==1) = []; end
+                case 'C'   % per session: drop class 1, prep; then pool and select
+                    a = d.t_trainingset; b = d.t_testset;
+                    if drop, a = a(:,:,ya~=1); b = b(:,:,yb~=1); end
+                    xs = cat(3, P(a), P(b)); xs = xs(rows,:,:);
+                case 'D'   % pool, drop class 1, prep, select
+                    ab = cat(3, d.t_trainingset, d.t_testset);
+                    if drop, ab = ab(:,:,y0~=1); end
+                    xs = P(ab); xs = xs(rows,:,:);
+                case 'E'   % no prep
+                    xs = cat(3, d.t_trainingset(rows,:,:), d.t_testset(rows,:,:));
+                    if drop, xs(:,:,y0==1) = []; end
+                case 'F'   % A, then prep again on the pooled selected rows
+                    a = P(d.t_trainingset); b = P(d.t_testset); xs = cat(3, a(rows,:,:), b(rows,:,:));
+                    if drop, xs(:,:,y0==1) = []; end
+                    xs = P(xs);
+                otherwise
+                    error('buildPipelineLayoutFolds:prepOrder', 'Unknown prepOrder %s', ec.prepOrder);
             end
+            if drop, y0(y0==1) = []; end
+            clear d a b ab
             cache(s) = struct('x', xs, 'y', categorical(y0));
         end
         c = cache(s); x = c.x; y = c.y;
