@@ -20,6 +20,11 @@ function manifest = runReplication(varargin)
 %   ids         {}      exact experiment ids (see 'listOnly')
 %   listOnly    false   print the selected experiment ids and exit
 %   seed        0       master seed, set before every experiment
+%   rngType     'twister'  CPU generator for rng(seed); every later rng(i) / rng(1)
+%                       in the original code keeps this generator. The Nov 2025
+%                       paper runs (HPC and Windows) used 'threefry': only with
+%                       'threefry' do the datastore shuffle and the weight
+%                       initialisation match them (replication/sourceReplication)
 %   ncval       'auto'  'auto' = number of fold files found, or a number
 %   perFold     true    save every fold as soon as it finishes and resume
 %                       from the next unfinished fold (see "Per-fold saving")
@@ -101,6 +106,7 @@ addParameter(p, 'layerNames',  {});
 addParameter(p, 'ids',         {});
 addParameter(p, 'listOnly',    false);
 addParameter(p, 'seed',        0);
+addParameter(p, 'rngType',     'twister');
 addParameter(p, 'ncval',       'auto');
 addParameter(p, 'parTrain',    false);
 addParameter(p, 'perFold',     true);
@@ -277,7 +283,7 @@ for g = 1:numel(grid)
 
     outDir = fullfile(projectLoc, 'cvalresults', config.datasetType, config.typeNet);
     before = listResults(outDir);
-    setGlobalSeed(o.seed);
+    setGlobalSeed(o.seed, o.rngType);
     row.startedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
     fprintf('[%3d/%d] run              %s (ncval=%d)\n', g, numel(grid), k.id, ncval);
     try
@@ -347,11 +353,11 @@ for i = todo
         fprintf('        fold %2d  saved earlier, skipping\n', i);
         continue
     end
-    setGlobalSeed(o.seed);                       % same pre-fold RNG state on fresh and resumed runs
+    setGlobalSeed(o.seed, o.rngType);            % same pre-fold RNG state on fresh and resumed runs
     t0 = tic;
     startedAt = char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
     [model, evaluation] = perfold_training(config, i);   % original: seeds rng(i) before training
-    foldMeta = struct('experimentId', k.id, 'fold', i, 'masterSeed', o.seed, ...
+    foldMeta = struct('experimentId', k.id, 'fold', i, 'masterSeed', o.seed, 'rngType', o.rngType, ...
         'foldSeed', sprintf('rng(%d) via ensureReproducibility', i), 'gitCommit', sha, ...
         'startedAt', startedAt, 'finishedAt', char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss')), ...
         'matlab', version);
@@ -441,8 +447,9 @@ if canUseGPU && isempty(which('deep.gpu.deterministicAlgorithms'))
 end
 end
 
-function setGlobalSeed(seed)
-rng(seed, 'twister');
+function setGlobalSeed(seed, rngType)
+if nargin < 2 || isempty(rngType), rngType = 'twister'; end
+rng(seed, rngType);
 if canUseGPU
     gpurng(seed, 'Philox');
 end
@@ -465,7 +472,7 @@ row = struct( ...
     'id', k.id, 'status', '', 'message', '', ...
     'datasetType', k.datasetType, 'ncats', k.ncats, 'typeNet', k.typeNet, ...
     'domain', k.domain, 'layerName', k.layerName, 'ncval', NaN, ...
-    'masterSeed', o.seed, 'foldSeeds', 'rng(fold) via ensureReproducibility; rng(1) datastore shuffle', ...
+    'masterSeed', o.seed, 'foldSeeds', ['rng(fold) via ensureReproducibility; rng(1) datastore shuffle; generator ' o.rngType], ...
     'parTrain', double(o.parTrain), ...
     'resultFile', '', 'dataSha256', '', ...
     'gitCommit', sha, 'gitDirty', double(dirty), ...
