@@ -1,0 +1,30 @@
+#!/bin/sh
+# Blocks a direct push to main unless every commit pushed touches only the paperwork set.
+# Paperwork set: LOGBOOK.md, keyen.md, docs/sessions/**  (see docs/GIT_PROTOCOL.md).
+# Escape hatch: PLSTM_ALLOW_MAIN=1 git push ...
+
+[ "$PLSTM_ALLOW_MAIN" = "1" ] && exit 0
+
+PAPERWORK='^(LOGBOOK\.md|keyen\.md|docs/sessions/.*)$'
+ZERO=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] || continue
+  [ "$local_sha" = "$ZERO" ] && { echo "pre-push: refusing to delete main." >&2; exit 1; }
+  if [ "$remote_sha" = "$ZERO" ]; then
+    range="$local_sha --not --remotes"   # new main on the remote: only commits no remote has
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  # Merge commits of reviewed PRs are fine: only check non-merge commits.
+  for c in $(git rev-list --no-merges $range); do
+    other=$(git diff-tree --root --no-commit-id --name-only -r "$c" | grep -Ev "$PAPERWORK")
+    if [ -n "$other" ]; then
+      echo "pre-push: commit $c on main touches non-paperwork paths:" >&2
+      echo "$other" | sed 's/^/  /' >&2
+      echo "Push a branch and open a PR instead." >&2
+      exit 1
+    fi
+  done
+done
+exit 0

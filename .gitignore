@@ -1,0 +1,29 @@
+# Root-anchored on purpose: Windows paths are case-insensitive, so an unanchored
+# pattern can silently untrack a differently cased folder somewhere else.
+
+# Run outputs written by the released code and the replication driver
+/cvalresults/
+/pretrainedModels/
+/pretrainedModels_hpc/
+
+# Full fold files live on the PC only (datasets\folds is a local copy of
+# M:\Earth\datasets\folds). Only the shipped demo folds are tracked.
+/datasets/folds/**/*.mat
+!/datasets/folds/CWL/NEC21_C2/fullchannels/source_fold1.mat
+!/datasets/folds/CWL/NEC21_C2/targetdomain1/target_fold1.mat
+
+# Built wiki (mkdocs build); never committed
+/site/
+
+# MATLAB editor and build leftovers
+*.asv
+*.autosave
+/slprj/
+/codegen/
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+/.vscode/
+/.idea/
