@@ -27,3 +27,7 @@ Thumbs.db
 desktop.ini
 /.vscode/
 /.idea/
+
+# Python bytecode (the wiki build hooks)
+__pycache__/
+*.pyc
