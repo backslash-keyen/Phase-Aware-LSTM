@@ -100,4 +100,20 @@ CWL C2, DeepRNN, Fp1-Fz target, threefry. Two source-net branches: the HPC nets
 the paper's target runs started from, and our threefry nets (bit-identical to the
 Nov 2025 Windows nets). The paper's CHARM cell is the HPC run: val 60.13, test 56.34.
 
-*(filled in as the runs finish)*
+10-fold mean (std) accuracy in %. "Mean abs diff" is the mean, over folds, of the absolute test difference from the HPC fold.
+
+| Variant | Branch | Val | Test | Mean abs diff (test) vs HPC fold |
+|---|---|---|---|---|
+| Paper (HPC run) | | 60.13 | 56.34 | |
+| `charmBase` | HPC nets | 59.79 (2.60) | 56.43 (1.77) | 1.47 |
+| `charmBase` | threefry | 60.39 (4.08) | 56.27 (2.20) | 0.91 |
+| `charm3Conv` | HPC nets | 59.51 (1.54) | 56.03 (1.16) | 0.58 |
+| `charm3Conv` | threefry | 59.61 (1.49) | 55.88 (0.68) | 0.88 |
+| `charmInstNorm` | HPC nets | 52.32 (0.93) | 51.33 (0.29) | 5.02 |
+| `charmInstNorm` | threefry | 52.05 (0.71) | 51.34 (0.42) | 5.00 |
+| `charmSourceTrained` | threefry | running | | |
+
+* **The replication row reproduces.** `charmBase` lands within 0.1 points of the paper's test mean on both branches.
+* **Three conv layers change nothing.** The fold-to-fold spread is smaller, but the means are the same.
+* **Instance normalisation hurts, by about 5 points, close to chance.** It rescales Fp1 and Fz per trial before they reach the source DeepRNN, which was trained on raw-scale signals. The fine-tuning does not recover from that.
+* **Source-trained, source stage (first 5 folds).** CHARM + DeepRNN validates at 67.6 on the 61-channel source, like the plain DeepRNN source (67-68). Its source test accuracy is only 51.2, against 60 for the plain source. So CHARM fits the training subjects' channels and does not generalise to the test subjects.
