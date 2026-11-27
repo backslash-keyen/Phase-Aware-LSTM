@@ -22,6 +22,21 @@ if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
     end
     return
 end
+if strcmpi(k.layerName, 'phased-lstm')
+    names = {};
+    if isfield(v, 'names'), names = v.names; end
+    if ~any(startsWith(names, 'phased'))
+        ok = false;
+        reason = ['the Phased LSTM projection is not in the released code; run with ''variant'', ' ...
+                  '''phasedBase'' (the Nov 2025 layer, ported unchanged) or another phased<Name> version'];
+        return
+    end
+    if ~(strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && k.ncats == 2)
+        ok = false;
+        reason = 'the Phased LSTM versions are set up for CWL 2-class DeepRNN (its Nov 2025 options routing)';
+        return
+    end
+end
 if strcmpi(k.layerName, 'baseTransfer') && ~(isfield(v, 'names') && any(strcmp(v.names, 'dualSourceTransfer')))
     ok = false;
     reason = ['define_layerArchitecture.m has no builder for layer "baseTransfer" ' ...
