@@ -43,6 +43,10 @@ classdef charmLayerLowMem < nnet.layer.Layer & nnet.layer.Formattable
         end
 
         function layer = initialize(layer, layout) %#ok<INUSD>
+            % Only a fresh layer is initialised. charmLayer re-draws its weights on
+            % every initialize call, which is harmless for a new CHARM but would wipe
+            % the source-trained CHARM when trainNetwork starts the target run.
+            if ~isempty(layer.Wk) && ~isempty(layer.Q), return; end
             F = layer.FilterSize; d = layer.EmbDim; M = layer.NumCanonical;
             sW = sqrt(6/(F + d));
             W  = single((2*sW*rand(F,1,d) - sW));
@@ -110,6 +114,9 @@ classdef charmLayerLowMem < nnet.layer.Layer & nnet.layer.Formattable
             dW = reshape(dW, F, 1, d);
             dXk = permute(reshape(dXr, B, C, T), [2 1 3]);           % [C x B x T]
             dX = permute(dXm, [1 3 2]) + dXk;                         % [C x B x T]
+            % trainNetwork expects dlarray outputs; dX keeps the input's format
+            if isa(X, 'dlarray') && ~isempty(dims(X)), dX = dlarray(dX, dims(X)); else, dX = dlarray(dX); end
+            dW = dlarray(dW); db = dlarray(db); dQ = dlarray(dQ);
         end
     end
 
@@ -121,9 +128,9 @@ classdef charmLayerLowMem < nnet.layer.Layer & nnet.layer.Formattable
             Kr = zeros(R, d, 'like', Xr); idx = zeros(R, d);          % double indices on the CPU
             for r0 = 1:layer.ChunkRows:R
                 r = r0:min(R, r0 + layer.ChunkRows - 1);
-                Y = dlconv(reshape(Xr(r, :), numel(r), 1, []), W, b, ...
+                Y = dlconv(dlarray(reshape(Xr(r, :), numel(r), 1, [])), W, b, ...
                     'DataFormat','BCT', 'Stride',1, 'Padding','same');   % [n x d x T]
-                [m, i] = max(extractdata(Y), [], 3);
+                [m, i] = max(numericOf(Y), [], 3);
                 Kr(r, :) = m; idx(r, :) = gather(double(i));
             end
         end

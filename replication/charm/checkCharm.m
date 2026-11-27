@@ -59,14 +59,17 @@ rng(3, 'threefry'); lb = initialize(charmLayerLowMem(M, d), []);
 lb.ChunkRows = 7;                                  % force several chunks
 na = initialize(dlnetwork([sequenceInputLayer(C, 'Name', 'in'); la], 'Initialize', false), X);
 nb = initialize(dlnetwork([sequenceInputLayer(C, 'Name', 'in'); lb], 'Initialize', false), X);
+nb.Learnables.Value = na.Learnables.Value;        % same weights (Wk, bk, Q) in both
 [za2, ga, gxa] = dlfeval(@lossGradX, na, X);
 [zb2, gb, gxb] = dlfeval(@lossGradX, nb, X);
 rel = @(u, v) max(abs(u(:) - v(:))) / max(1e-12, max(abs(u(:))));
 eg = cellfun(@(u, v) rel(extractdata(u), extractdata(v)), ga.Value, gb.Value);
 ex = rel(extractdata(gxa), extractdata(gxb));
+dbAbs = max(abs(extractdata(ga.Value{2}(:)) - extractdata(gb.Value{2}(:))));
 report('4b. low-memory CHARM == charmLayer (output, dW, db, dQ, dX)', ...
-    rel(za2, zb2) < 1e-5 && all(eg < 1e-4) && ex < 1e-4, ...
-    sprintf('out %.1g, grads %s, dX %.1g', rel(za2, zb2), mat2str(eg', 2), ex));
+    rel(za2, zb2) < 1e-5 && eg(1) < 1e-4 && eg(3) < 1e-4 && dbAbs < 1e-5 && ex < 1e-4, ...
+    sprintf('out %.1g, rel dW %.1g, |db diff| %.1g (true db = 0: a common shift of all keys leaves the softmax unchanged), rel dQ %.1g, rel dX %.1g', ...
+    rel(za2, zb2), eg(1), dbAbs, eg(3), ex));
 
 % 5 -------------------------------------------------------------------
 nn = dlnetwork([sequenceInputLayer(C, 'Name', 'in'); instanceNormalizationLayer('Name', 'in2')]);
@@ -102,14 +105,16 @@ for name = {'charmBase', 'charm3Conv', 'charmInstNorm', 'charmSourceTrained'}
         tNet = trainNetwork(xt2, yt, lg, opts);
         L = tNet.Layers;
         names = string({L.Name});
-        ok = L(1).InputSize == Ct && any(arrayfun(@(l) isa(l, 'charmLayer') || isa(l, 'charmLayer3Conv'), L));
+        ok = L(1).InputSize == Ct && any(arrayfun(@(l) isa(l, 'charmLayer') || isa(l, 'charmLayer3Conv') || isa(l, 'charmLayerLowMem'), L));
         detail = strjoin(names(1:min(4, end)), ' > ');
         if strcmp(name{1}, 'charmSourceTrained')
             s0 = sNet.Layers(2); t1 = L(2);
-            ok = ok && isa(s0, 'charmLayerLowMem') && size(t1.Q, 1) == Cs;
+            dq = max(abs(gather(double(t1.Q(:))) - gather(double(s0.Q(:)))));
+            % 3 Adam steps at LR 1e-3 move Q by about 3e-3; a re-drawn Q would differ by ~0.3
+            ok = ok && isa(s0, 'charmLayerLowMem') && size(t1.Q, 1) == Cs && dq < 0.05;
             % untrained CHARM-base: Q is Glorot within sqrt(6/(d+M)); the source-trained Q came from the source run
             detail = sprintf('%s; transferred Q from source run, |Q_target - Q_source| = %.3g after 1 target epoch', ...
-                detail, max(abs(extractdata(dlarray(t1.Q(:))) - extractdata(dlarray(s0.Q(:))))));
+                detail, dq);
         end
         if strcmp(name{1}, 'charmInstNorm'), ok = ok && any(names == "instnorm"); end
         if strcmp(name{1}, 'charm3Conv'),    ok = ok && isa(L(2), 'charmLayer3Conv') && L(2).NumConv == 3; end

@@ -51,6 +51,7 @@ classdef charmLayer3Conv < nnet.layer.Layer & nnet.layer.Formattable & nnet.laye
         end
 
         function layer = initialize(layer, layout) %#ok<INUSD>
+            if ~isempty(layer.Wk) && ~isempty(layer.Q), return; end   % keep trained weights
             F = layer.FilterSize; d = layer.EmbDim; M = layer.NumCanonical;
 
             sW = sqrt(6/(F + d));
