@@ -52,6 +52,22 @@ net = initialize(net, X);
 nz = cellfun(@(v) any(extractdata(v(:)) ~= 0), g.Value);
 report('4. 3-conv CHARM: every learnable has a gradient', all(nz), strjoin(strcat(g.Parameter, '=', string(nz)), ' '));
 
+% 4b ------------------------------------------------------------------
+% charmLayerLowMem (hand-written backward) vs charmLayer (autodiff): output and gradients
+rng(3, 'threefry'); la = initialize(charmLayer(M, d), []);
+rng(3, 'threefry'); lb = initialize(charmLayerLowMem(M, d), []);
+lb.ChunkRows = 7;                                  % force several chunks
+na = initialize(dlnetwork([sequenceInputLayer(C, 'Name', 'in'); la], 'Initialize', false), X);
+nb = initialize(dlnetwork([sequenceInputLayer(C, 'Name', 'in'); lb], 'Initialize', false), X);
+[za2, ga, gxa] = dlfeval(@lossGradX, na, X);
+[zb2, gb, gxb] = dlfeval(@lossGradX, nb, X);
+rel = @(u, v) max(abs(u(:) - v(:))) / max(1e-12, max(abs(u(:))));
+eg = cellfun(@(u, v) rel(extractdata(u), extractdata(v)), ga.Value, gb.Value);
+ex = rel(extractdata(gxa), extractdata(gxb));
+report('4b. low-memory CHARM == charmLayer (output, dW, db, dQ, dX)', ...
+    rel(za2, zb2) < 1e-5 && all(eg < 1e-4) && ex < 1e-4, ...
+    sprintf('out %.1g, grads %s, dX %.1g', rel(za2, zb2), mat2str(eg', 2), ex));
+
 % 5 -------------------------------------------------------------------
 nn = dlnetwork([sequenceInputLayer(C, 'Name', 'in'); instanceNormalizationLayer('Name', 'in2')]);
 Y = extractdata(predict(nn, 3 + 2*X));
@@ -90,7 +106,7 @@ for name = {'charmBase', 'charm3Conv', 'charmInstNorm', 'charmSourceTrained'}
         detail = strjoin(names(1:min(4, end)), ' > ');
         if strcmp(name{1}, 'charmSourceTrained')
             s0 = sNet.Layers(2); t1 = L(2);
-            ok = ok && isa(s0, 'charmLayer') && size(t1.Q, 1) == Cs;
+            ok = ok && isa(s0, 'charmLayerLowMem') && size(t1.Q, 1) == Cs;
             % untrained CHARM-base: Q is Glorot within sqrt(6/(d+M)); the source-trained Q came from the source run
             detail = sprintf('%s; transferred Q from source run, |Q_target - Q_source| = %.3g after 1 target epoch', ...
                 detail, max(abs(extractdata(dlarray(t1.Q(:))) - extractdata(dlarray(s0.Q(:))))));
@@ -113,6 +129,14 @@ function [loss, g] = lossGrad(net, X)
 Z = forward(net, X);
 loss = sum(Z.^2, 'all');
 g = dlgradient(loss, net.Learnables);
+end
+
+function [z, g, gx] = lossGradX(net, X)
+Z = forward(net, X);
+w = dlarray(single(reshape(1:numel(Z), size(Z))) / numel(Z), dims(Z));   % fixed, non-symmetric weights
+loss = sum(Z .* w, 'all');
+[g, gx] = dlgradient(loss, net.Learnables, X);
+z = extractdata(Z);
 end
 
 function [x, y] = toyData(C, N, T)

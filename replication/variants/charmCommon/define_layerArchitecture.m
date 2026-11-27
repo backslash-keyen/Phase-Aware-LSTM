@@ -35,12 +35,14 @@ base = callOriginal_charm('define_layerArchitecture', model, c);   % e.g. get_mo
 assert(isa(base(1), 'nnet.cnn.layer.SequenceInputLayer'), 'charm:sourceInput', ...
     'charmSourceTrained supports source nets that start with a sequence input layer (DeepRNN).');
 M = base(1).InputSize;                     % canonical channels = source montage size
-layers = [base(1); charmLayer(M, 32, 'Name', 'charmLayer'); base(2:end)];
+% charmLayerLowMem = charmLayer (same model, init and rand calls) with a backward
+% pass that fits 61 channels x mini-batch 197 x 500 samples in this PC's memory
+layers = [base(1); charmLayerLowMem(M, 32, 'Name', 'charmLayer'); base(2:end)];
 end
 
 function layers = charmTransferNet(model)
 L = model.pretrainedNet.Layers;
-assert(numel(L) > 2 && isa(L(2), 'charmLayer'), 'charm:noSourceCharm', ...
+assert(numel(L) > 2 && (isa(L(2), 'charmLayer') || isa(L(2), 'charmLayerLowMem')), 'charm:noSourceCharm', ...
     'charmSourceTrained needs the CHARM + source net (sourceDomainCHARMClassifier_*), got %s.', class(L(2)));
 if ~isscalar(model.nchans), nchans = numel(model.nchans); else, nchans = model.nchans; end
 inp  = sequenceInputLayer(nchans, 'MinLength', model.signalLength, 'Name', 'input');
