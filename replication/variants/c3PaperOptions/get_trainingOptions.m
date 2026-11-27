@@ -9,7 +9,7 @@ function hyperParameters = get_trainingOptions(config)
 % (LR 0.0029, mini-batch 197) with epochs capped at 30 (source) / 15 (target).
 % The Nov 2025 pipeline behind the paper (L:\plstm\helperLibrary\modelframe\
 % get_trainingOptions.m) routes CWL DeepRNN ncats == 3 to the shipped
-% get_trainingOptions_CWL_C3_DeepRNN.m (LR 0.004687, mini-batch 234,
+% get_trainingOptions_CWL_C3_DeepRNN.m (LR 0.004687, mini-batch 234, beta1 0.9 as stored in the HPC runs,
 % 68 epochs, best-validation) and sets the epochs per domain:
 %   source-domain, source-domain-2   68 (the file's value, no override)
 %   target-domain                    50
@@ -25,6 +25,10 @@ if ~(strcmpi(config.datasetType, 'cwl') && strcmpi(config.typeNet, 'deeprnn') &&
     return
 end
 hyperParameters = get_trainingOptions_CWL_C3_DeepRNN();
+% The options stored in the HPC 3-class result files (source and targets,
+% 5 Nov 2025) have GradientDecayFactor 0.9, not the file's 0.8853; every other
+% value matches the file. Use what the HPC runs actually trained with.
+hyperParameters.GradientDecayFactor = 0.9;
 switch lower(config.domain)
     case 'target-domain'
         hyperParameters.MaxEpochs = 50;
