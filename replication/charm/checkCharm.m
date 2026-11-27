@@ -1,4 +1,4 @@
-function checkCharm()
+function nFail = checkCharm()
 %CHECKCHARM  Quick CPU checks of the CHARM layers and of every CHARM variant's networks.
 %
 %   cd <repo root>; addpath replication/charm; checkCharm
@@ -21,6 +21,7 @@ common = fullfile(vdir, 'charmCommon');
 addpath(common, '-begin');
 cleanup = onCleanup(@() rmpath(common));
 rng(7, 'threefry');
+report();                                % reset the failure count
 
 C = 5; B = 4; T = 60; M = 9; d = 32;
 X = dlarray(single(randn(C, B, T)), 'CBT');
@@ -103,6 +104,9 @@ for name = {'charmBase', 'charm3Conv', 'charmInstNorm', 'charmSourceTrained'}
     end
     rmpath(vd);
 end
+nFail = report();
+fprintf('[checkCharm] %d failed\n', nFail);
+if nargout == 0 && nFail > 0, error('checkCharm:fail', '%d CHARM checks failed', nFail); end
 end
 
 function [loss, g] = lossGrad(net, X)
@@ -116,7 +120,11 @@ x = arrayfun(@(~) single(randn(C, T)), 1:N, 'UniformOutput', false)';
 y = categorical(mod(0:N-1, 2)' + 1);
 end
 
-function report(what, ok, detail)
+function n = report(what, ok, detail)
+persistent fails
+if nargin == 0, n = fails; if isempty(n), n = 0; end, fails = 0; return; end
+if isempty(fails), fails = 0; end
+fails = fails + ~ok;
 if ok, tag = 'PASS'; else, tag = 'FAIL'; end
 fprintf('[checkCharm] %s  %s  %s\n', tag, what, detail);
 end
