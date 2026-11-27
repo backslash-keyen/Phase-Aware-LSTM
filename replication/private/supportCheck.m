@@ -22,6 +22,21 @@ if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
     end
     return
 end
+if strcmpi(k.layerName, 'assoc-lstm')
+    names = {};
+    if isfield(v, 'names'), names = v.names; end
+    if ~any(startsWith(names, 'al_'))
+        ok = false;
+        reason = ['the Associative LSTM projection is not in the released code; run with ''variant'', ' ...
+                  '''al_paper'' (Danihelka et al. 2016 as written) or another al_<version> (replication/assocLSTM)'];
+        return
+    end
+    if ~strcmpi(k.datasetType, 'CWL')
+        ok = false;
+        reason = 'the Associative LSTM versions are run on the CWL cells only';
+        return
+    end
+end
 if strcmpi(k.layerName, 'baseTransfer') && ~(isfield(v, 'names') && any(strcmp(v.names, 'dualSourceTransfer')))
     ok = false;
     reason = ['define_layerArchitecture.m has no builder for layer "baseTransfer" ' ...
