@@ -111,9 +111,10 @@ Nov 2025 Windows nets). The paper's CHARM cell is the HPC run: val 60.13, test 5
 | `charm3Conv` | threefry | 59.61 (1.49) | 55.88 (0.68) | 0.88 |
 | `charmInstNorm` | HPC nets | 52.32 (0.93) | 51.33 (0.29) | 5.02 |
 | `charmInstNorm` | threefry | 52.05 (0.71) | 51.34 (0.42) | 5.00 |
-| `charmSourceTrained` | threefry | running | | |
+| `charmSourceTrained` | threefry (own source run) | 60.60 (2.14) | 56.64 (1.99) | 1.10 |
 
 * **The replication row reproduces.** `charmBase` lands within 0.1 points of the paper's test mean on both branches.
 * **Three conv layers change nothing.** The fold-to-fold spread is smaller, but the means are the same.
 * **Instance normalisation hurts, by about 5 points, close to chance.** It rescales Fp1 and Fz per trial before they reach the source DeepRNN, which was trained on raw-scale signals. The fine-tuning does not recover from that.
-* **Source-trained, source stage (first 5 folds).** CHARM + DeepRNN validates at 67.6 on the 61-channel source, like the plain DeepRNN source (67-68). Its source test accuracy is only 51.2, against 60 for the plain source. So CHARM fits the training subjects' channels and does not generalise to the test subjects.
+* **Source-trained, source stage.** CHARM + DeepRNN validates at 67.90 on the 61-channel source over 10 folds, the same as the plain DeepRNN source (67-68). Its source test accuracy is only 50.39, against 60 for the plain source. So CHARM fits the training subjects' channels and does not generalise to new subjects.
+* **Source-trained, after transfer.** Fine-tuned on Fp1-Fz, it tests at 56.64. That is level with `charmBase` (56.3) and the paper (56.34). Pretraining CHARM on the source neither helps nor hurts on this task. The likely reason: with 2 input channels every canonical channel is a blend of Fp1 and Fz, so there is little for a learned reordering to carry over.
