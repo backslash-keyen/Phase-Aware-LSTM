@@ -18,7 +18,7 @@ classdef charmLayerLowMem < nnet.layer.Layer & nnet.layer.Formattable
         NumCanonical   % M
         EmbDim         % d
         FilterSize     % F
-        ChunkRows = 4000   % rows (trial x channel) per conv chunk
+        ChunkRows = 2000   % rows (trial x channel) per chunk (2000 x 500 x 40 floats = 160 MB)
     end
 
     properties (Learnable)
@@ -122,16 +122,23 @@ classdef charmLayerLowMem < nnet.layer.Layer & nnet.layer.Formattable
 
     methods (Access = private)
         function [Kr, idx] = keys(layer, Xr)
-            R = size(Xr, 1); d = layer.EmbDim;
-            W = dlarray(numericOf(layer.Wk), 'TCU');
-            b = dlarray(numericOf(layer.bk), '');
+            % conv as a matrix product over the F shifted copies of each row
+            % ('same' padding, padL = floor((F-1)/2) zeros on the left, as dlconv),
+            % so no convolution library is loaded (cuDNN's conv kernels cost
+            % about 1.9 GB of host memory on this PC)
+            [R, T] = size(Xr); d = layer.EmbDim; F = layer.FilterSize;
+            padL = floor((F - 1)/2); padR = F - 1 - padL;
+            W = reshape(numericOf(layer.Wk), F, d);
+            b = reshape(numericOf(layer.bk), 1, d);
             Kr = zeros(R, d, 'like', Xr); idx = zeros(R, d);          % double indices on the CPU
             for r0 = 1:layer.ChunkRows:R
-                r = r0:min(R, r0 + layer.ChunkRows - 1);
-                Y = dlconv(dlarray(reshape(Xr(r, :), numel(r), 1, [])), W, b, ...
-                    'DataFormat','BCT', 'Stride',1, 'Padding','same');   % [n x d x T]
-                [m, i] = max(numericOf(Y), [], 3);
-                Kr(r, :) = m; idx(r, :) = gather(double(i));
+                r = r0:min(R, r0 + layer.ChunkRows - 1); n = numel(r);
+                Xp = [zeros(n, padL, 'like', Xr), Xr(r, :), zeros(n, padR, 'like', Xr)];
+                S = zeros(n, T, F, 'like', Xr);
+                for f = 1:F, S(:, :, f) = Xp(:, f:f+T-1); end
+                Y = reshape(reshape(S, n*T, F) * W, n, T, d) + reshape(b, 1, 1, d);   % [n x T x d]
+                [m, i] = max(Y, [], 2);
+                Kr(r, :) = reshape(m, n, d); idx(r, :) = gather(double(reshape(i, n, d)));
             end
         end
     end
