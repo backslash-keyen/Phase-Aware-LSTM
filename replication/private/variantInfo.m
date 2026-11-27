@@ -62,6 +62,13 @@ function v = variantInfo(names, sourceModelRoot)
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
+%   phased<Name>    path    Phased LSTM projection (Neil et al. 2016; not in the
+%                           released code), layer 'phased-lstm', one version per
+%                           folder replication/variants/phased/<name>: phasedBase
+%                           (the Nov 2025 layer behind the paper's Phased-LSTM rows,
+%                           ported unchanged), seven corrections, phasedNeil (the
+%                           paper as written), phasedIdeal, phasedIdealWide; see
+%                           replication/phased/README.md. Use at most one.
 %   The phase-LSTM speed variants replace the same layer, so at most one of
 %   them (and signedPhaseLSTM) can be used at a time.
 
@@ -70,13 +77,20 @@ if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretraine
 names = cellstr(names);
 pvDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'versions', 'fast');
 pvNames = names(startsWith(names, 'pv_'));
+phDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'variants', 'phased');
+phNames = names(startsWith(names, 'phased'));
+for i = 1:numel(phNames)
+    if ~isfile(fullfile(phDir, phNames{i}, 'phasedSettings.m'))
+        error('replication:unknownVariant', 'Unknown Phased LSTM version %s (folders in %s).', phNames{i}, phDir);
+    end
+end
 for i = 1:numel(pvNames)
     if ~isfolder(fullfile(pvDir, extractAfter(pvNames{i}, 'pv_'))) || strcmp(pvNames{i}, 'pv_common')
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
 order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
-order = [order, sort(pvNames)];
+order = [order, sort(pvNames), sort(phNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
@@ -85,6 +99,9 @@ end
 names = order(ismember(order, names));        % canonical order -> stable ids
 if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
     error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
+end
+if numel(phNames) > 1
+    error('replication:variantConflict', 'Use at most one Phased LSTM version (got %s).', strjoin(phNames, ', '));
 end
 speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) + numel(pvNames) > 1
@@ -108,6 +125,10 @@ for i = 1:numel(names)
             % in front of a pretrained source network
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source') && ...
                 any(strcmpi(k.layerName, {'ffnn','lstm','gru','phase-lstm'})); %#ok<AGROW>
+        case phNames
+            v.dirs{end+1} = fullfile(phDir, 'common');
+            v.dirs{end+1} = fullfile(phDir, names{i});
+            tests{end+1} = @(k) strcmpi(k.layerName, 'phased-lstm'); %#ok<AGROW>
         case 'dualSourceTransfer'
             % beyond the released code: train the dual-channel (Fp1-Fz) source
             % and fine-tune it on the target (baseTransfer actually transfers)

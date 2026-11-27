@@ -94,7 +94,8 @@ Domains are the ones `perfold_dataset.m` already knows. Data folders are relativ
 
 These cells stay blank, with the reason in the footnotes, until the missing code is added to the repository:
 
-* **Not in the repository at all:** CHARM, Phased-LSTM and Complex-LSTM projections (Tables 4–7, 10); the atan, atan2-a, atan2-b and numeric-sin-cos phase parametrizations (Table 9); `get_trainingOptions_Graz_EEGNet.m` and `get_trainingOptions_Graz_Transformer.m`, so every MI EEGNet and MI Transformer cell (Tables 1–4, 6).
+* **Not in the released code:** the Phased-LSTM projection. The Nov 2025 layer behind the paper's Phased-LSTM rows is ported unchanged as the opt-in variant `phasedBase` (CWL 2-class DeepRNN cells only), with corrections, a version faithful to Neil et al. 2016 and two ideal versions; see [phased/README.md](phased/README.md).
+* **Not in the repository at all:** CHARM and Complex-LSTM projections (Tables 4–7, 10); the atan, atan2-a, atan2-b and numeric-sin-cos phase parametrizations (Table 9); `get_trainingOptions_Graz_EEGNet.m` and `get_trainingOptions_Graz_Transformer.m`, so every MI EEGNet and MI Transformer cell (Tables 1–4, 6).
 * **F3–F7 channel selection** (Tables 3, 5): `perfold_dataset.m` has a single `dualchannelsource/` folder, so there is no way to address a second, F3–F7 dual-channel source.
 * **Temporal-masking data** (Table 8): `utils/crossvalidation/perFold_data_nec21_temporalMasking.m`, which made these folds, calls functions that are not in the repository and writes to a hard-coded `E:\` path. The masked folds must already exist under `temporalMasking_*`.
 

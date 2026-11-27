@@ -202,7 +202,12 @@ for n = 1:numel(nets)
     net = nets{n};
     for p = 1:numel(projs)
         proj = projs{p};
-        if any(strcmp(proj, {'charm','phased-lstm','complex-lstm'}))
+        if strcmp(proj, 'phased-lstm')
+            % not in the released code: the Phased LSTM variants (phasedBase = the Nov
+            % 2025 layer, ported unchanged) run the CWL cells; MI stays missing
+            cwl = expKey('CWL', ncats, net, domain, proj);
+            mi  = missing('Phased-LSTM projection is not in the released code (Phased LSTM variants cover CWL only)');
+        elseif any(strcmp(proj, {'charm','complex-lstm'}))
             cwl = missing(sprintf('%s projection is not in the released code', labels{p}));
             mi  = cwl;
         else
