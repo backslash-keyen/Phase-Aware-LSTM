@@ -1,0 +1,72 @@
+site_name: Phase-Aware LSTM replication
+site_description: Replicating the phase-aware LSTM projection paper from its released MATLAB code
+repo_url: https://github.com/backslash-keyen/Phase-Aware-LSTM
+repo_name: backslash-keyen/Phase-Aware-LSTM
+edit_uri: ""
+docs_dir: docs/wiki
+site_dir: site
+exclude_docs: |
+  _build/
+
+hooks:
+  - docs/wiki/_build/hooks.py
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+validation:
+  omitted_files: info
+  absolute_links: info
+  unrecognized_links: warn
+  anchors: info
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Overview: guide/overview.md
+      - The experiment: guide/experiment.md
+      - Where the replication stands: guide/status.md
+  - Working in the repo:
+      - Getting started: working/getting-started.md
+      - Code map: working/code-map.md
+      - Reproducing a result: working/reproducing.md
+      - Glossary: working/glossary.md
+  - Reference:
+      - Tree map: reference/tree.md
+      - Tables and notes: reference/tables.md
+      - Results index: reference/results.md
+      - Decisions index: reference/decisions.md
+      - CLAUDE.md: repo/CLAUDE.md
+      - keyen.md: repo/keyen.md
+      - AGENTS.md: repo/AGENTS.md
+      - Git protocol: repo/docs/GIT_PROTOCOL.md
+      - Replication README: repo/replication/README.md
