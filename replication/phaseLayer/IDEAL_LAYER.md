@@ -61,6 +61,8 @@ U (Wolter & Yao sec. 4.4, scuRNN); several rotated copies of the memory
 
 ## Open questions for Keyen
 
-- Sampling rate of the CWL trials (500 samples per trial), to initialise omega over the EEG bands.
+- Sampling rate: answered, 250 Hz (500 samples = 2 s). omega_j = 2 pi f_j / 250
+  rad per sample, with f_j log-spaced over 1 to 40 Hz (delta to low gamma), so
+  omega spans about 0.025 to 1.0 rad per sample.
 - Should the output stay |h| (the paper's interface) or become a learned readout of Re and Im?
 - Missing from the folder: Trabelsi 2018 (Deep Complex Networks: complex init and normalisation) and Orvieto 2023 (LRU). RotRNN summarises the LRU, so it is optional.
