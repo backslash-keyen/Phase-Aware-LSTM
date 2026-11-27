@@ -59,6 +59,12 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   ph_<version>    path    LSTM projection with peephole connections
+%                           (replication/peephole/versions/<version>, e.g.
+%                           ph_gers2002 = Gers, Schraudolph & Schmidhuber 2002,
+%                           ph_ideal); swaps the lstmLayer of the LSTM
+%                           projection rows only, options unchanged; at most
+%                           one ph_ version; see replication/peephole/README.md
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -76,7 +82,17 @@ for i = 1:numel(pvNames)
     end
 end
 order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
-order = [order, sort(pvNames)];
+phDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'peephole');
+phNames = names(startsWith(names, 'ph_'));
+for i = 1:numel(phNames)
+    if ~isfolder(fullfile(phDir, 'versions', extractAfter(phNames{i}, 'ph_')))
+        error('replication:unknownVariant', 'Unknown peephole version %s (folders in %s).', phNames{i}, fullfile(phDir, 'versions'));
+    end
+end
+if numel(phNames) > 1
+    error('replication:variantConflict', 'Use at most one peephole version (ph_*).');
+end
+order = [order, sort(pvNames), sort(phNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
@@ -129,6 +145,11 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case phNames
+            v.dirs{end+1} = fullfile(phDir, 'common');
+            v.dirs{end+1} = fullfile(phDir, 'versions', extractAfter(names{i}, 'ph_'));
+            % the LSTM projection rows (target runs that put an lstmLayer in front of the source net)
+            tests{end+1} = @(k) strcmpi(k.layerName, 'lstm') && ~startsWith(lower(k.domain), 'source'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
