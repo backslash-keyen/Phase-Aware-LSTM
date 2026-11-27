@@ -1,0 +1,29 @@
+# No repo-wide line-ending normalisation: 84 files (the released code and the
+# version originals) are stored with CRLF exactly as shipped, and the
+# replication checks their hashes. Normalising would rewrite them.
+
+# Hook scripts must be LF, or sh fails on Windows clones.
+.githooks/*      text eol=lf
+*.sh             text eol=lf
+
+# Workflow files added from here on are LF.
+CLAUDE.md        text eol=lf
+AGENTS.md        text eol=lf
+keyen.md         text eol=lf
+LOGBOOK.md       text eol=lf
+BACKLOG.md       text eol=lf
+mkdocs.yml       text eol=lf
+docs/**/*.md     text eol=lf
+docs/**/*.py     text eol=lf
+.claude/**/*.md  text eol=lf
+
+# Binaries
+*.mat   binary
+*.fig   binary
+*.mlx   binary
+*.mlapp binary
+*.slx   binary
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.zip   binary

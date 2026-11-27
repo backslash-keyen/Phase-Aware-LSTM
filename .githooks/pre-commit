@@ -1,0 +1,20 @@
+#!/bin/sh
+# Blocks a commit on main unless every staged path is in the paperwork set.
+# Paperwork set: LOGBOOK.md, keyen.md, docs/sessions/**  (see docs/GIT_PROTOCOL.md).
+# Escape hatch: PLSTM_ALLOW_MAIN=1 git commit ...  (the message must say why and name the variable).
+
+branch=$(git symbolic-ref --short -q HEAD)
+[ "$branch" = "main" ] || exit 0
+[ "$PLSTM_ALLOW_MAIN" = "1" ] && exit 0
+
+PAPERWORK='^(LOGBOOK\.md|keyen\.md|docs/sessions/.*)$'
+
+other=$(git diff --cached --name-only | grep -Ev "$PAPERWORK")
+if [ -n "$other" ]; then
+  echo "pre-commit: main is reached only through merged PRs." >&2
+  echo "These staged paths are not paperwork (LOGBOOK.md, keyen.md, docs/sessions/):" >&2
+  echo "$other" | sed 's/^/  /' >&2
+  echo "Create a branch first: git switch -c claude/<topic>" >&2
+  exit 1
+fi
+exit 0
