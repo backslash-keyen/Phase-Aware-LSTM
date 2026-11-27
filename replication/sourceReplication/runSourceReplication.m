@@ -1,15 +1,17 @@
 function T = runSourceReplication(stage, varargin)
-%RUNSOURCEREPLICATION  Retrain the CWL C2 DeepRNN source models the way the paper's runs did.
+%RUNSOURCEREPLICATION  Retrain the CWL source models (DeepRNN or EEGNet) the way the paper's runs did.
 %
 %   T = runSourceReplication(1)            % stage 1: fold 1, trained twice, determinism check
 %   T = runSourceReplication(2)            % stage 2: all 10 folds (resumes after stage 1)
 %   T = runSourceReplication(1, 'id', 'cwl_N2_source-domain-2_DeepRNN_deeprnn', 'stem', 'sourceDomain2Classifier_N2_DeepRNN')
 %                                          % the same for the dual-channel source
 %   T = runSourceReplication(1, 'ncats', 3)  % CWL 3-class source (cwl2/, N3 files)
+%   T = runSourceReplication(1, 'typeNet', 'EEGNet')  % EEGNet backbone (cwl1/EEGNet)
 %   Name-value options
 %     ncats     2        2 or 3; sets the default id, stem and model folder cwl<ncats-1>
-%     id        'cwl_N<ncats>_source-domain_DeepRNN_deeprnn'   experiment id (runReplication 'listOnly')
-%     stem      'sourceDomainClassifier_N<ncats>_DeepRNN'      saved model file name stem
+%     typeNet   'DeepRNN'  'DeepRNN' or 'EEGNet'; sets the default id, stem and model folder
+%     id        'cwl_N<ncats>_source-domain_<typeNet>_<lower(typeNet)>'   experiment id (runReplication 'listOnly')
+%     stem      'sourceDomainClassifier_N<ncats>_<typeNet>'      saved model file name stem
 %     folds     1:10     stage-2 folds
 %     variant   ''       runReplication variant, e.g. 'c3PaperOptions'
 %     fold      1        stage-1 fold
@@ -19,11 +21,12 @@ function T = runSourceReplication(stage, varargin)
 %                        L:\plstm\pretrainedModels\cwl\cwl1\DeepRNN (read only)
 %
 %   Run from the repository root of a scratch copy: models are written to
-%   pretrainedModels/cwl/cwl1/DeepRNN and results to cvalresults/, as in the
+%   pretrainedModels/cwl/cwl<ncats-1>/<typeNet> and results to cvalresults/, as in the
 %   original code. Stage 1 keeps both stage-1 models in _runs/stage1_{a,b}/.
 
 p = inputParser;
 addParameter(p, 'ncats',   2);
+addParameter(p, 'typeNet', 'DeepRNN');
 addParameter(p, 'id',      '');
 addParameter(p, 'stem',    '');
 addParameter(p, 'folds',   1:10);
@@ -33,12 +36,12 @@ addParameter(p, 'rngType', 'threefry');
 addParameter(p, 'refDir',  '');
 parse(p, varargin{:});
 o = p.Results;
-if isempty(o.id),   o.id   = sprintf('cwl_N%d_source-domain_DeepRNN_deeprnn', o.ncats); end
-if isempty(o.stem), o.stem = sprintf('sourceDomainClassifier_N%d_DeepRNN', o.ncats); end
+if isempty(o.id),   o.id   = sprintf('cwl_N%d_source-domain_%s_%s', o.ncats, o.typeNet, lower(o.typeNet)); end
+if isempty(o.stem), o.stem = sprintf('sourceDomainClassifier_N%d_%s', o.ncats, o.typeNet); end
 rr = {'rngType', o.rngType};
 if ~isempty(o.variant), rr = [rr, {'variant', o.variant}]; end
 
-modelDir = fullfile('pretrainedModels', 'cwl', sprintf('cwl%d', o.ncats-1), 'DeepRNN');
+modelDir = fullfile('pretrainedModels', 'cwl', sprintf('cwl%d', o.ncats-1), o.typeNet);
 T = table();
 switch stage
     case 1
@@ -66,15 +69,18 @@ end
 end
 
 function T = summarise(files, refDir, stem, folds)
-fold = folds(:); identicalToRef = nan(numel(folds),1); lstmCosine = nan(numel(folds),1);
+fold = folds(:); identicalToRef = nan(numel(folds),1); firstWeightCosine = nan(numel(folds),1);
 for k = 1:numel(folds)
     if isempty(refDir), continue; end
     ref = fullfile(refDir, sprintf('%s_%d.mat', stem, folds(k)));
     if ~isfile(ref), continue; end
     C = compareSourceNets(files{k}, ref);
     identicalToRef(k) = all(C.identical);
-    lstmCosine(k) = C.cosine(find(contains(C.parameter, 'InputWeights'), 1));
+    % DeepRNN: the LSTM input weights; EEGNet (no recurrent layer): the first weight array
+    w = find(contains(C.parameter, 'InputWeights'), 1);
+    if isempty(w), w = find(endsWith(C.parameter, '_Weights'), 1); end
+    if ~isempty(w), firstWeightCosine(k) = C.cosine(w); end
 end
-T = table(fold, identicalToRef, lstmCosine);
+T = table(fold, identicalToRef, firstWeightCosine);
 disp(T)
 end
