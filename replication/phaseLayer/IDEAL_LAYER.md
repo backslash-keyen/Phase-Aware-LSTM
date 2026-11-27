@@ -31,19 +31,24 @@ Per unit j, complex memory c (stored as Re and Im), real input x:
      bands at the sampling rate.
    - The tanh term is an input-driven phase shift, like the Associative LSTM
      keys.
-4. Memory: c_t = f e^{i theta} c_{t-1} + sqrt(1 - f^2) i u.
+4. Memory: c_t = f e^{i theta} c_{t-1} + (1 - f) i u.
    - The eigenvalue of the transition has modulus f < 1, so the memory is
      stable and can decay (ceRNN).
-   - sqrt(1 - f^2) keeps E|c|^2 near |u|^2, as in the normalisation of the
-     LRU and RotRNN. An optional version uses plain i instead.
+   - The coupled input (1 - f) keeps |c| <= 1, like the GRU-style update of
+     Wolter & Yao (eq. 10), in the spirit of the LRU and RotRNN normalisation.
+     sqrt(1 - f^2), the LRU form, was dropped because its derivative is
+     unbounded as f -> 1. An optional version uses plain i instead.
 5. Hidden (complex, bounded): h = o bound(c).
    - Fed back: [Re h; Im h].
-   - Output: |h| keeps the paper's interface (H real channels into the source
-     net). A learned real readout W_o [Re h; Im h] is the alternative, as in
-     Wolter & Yao eq. 7.
+   - Output: |h|, as in the paper (Keyen, 27 Nov), giving H real channels
+     into the source net. The paper layer also outputs only the magnitude.
+     A learned readout W_o [Re h; Im h], as in Wolter & Yao eq. 7, is the
+     version idealReadout.
 6. Training: gradCap stays (overflow-safe clip). There is no atan2, no clip of
    the pre-activations and no 1/|c| anywhere, so gradients should stay finite
    in single precision. phaseCorrGradProbe will check this before any training.
+
+Implemented as phaseAwareLSTMIdeal (common/); versions pc_ideal* below.
 
 Optional later (one version each): orthogonal or Cayley-parameterised
 U (Wolter & Yao sec. 4.4, scuRNN); several rotated copies of the memory
@@ -56,7 +61,7 @@ U (Wolter & Yao sec. 4.4, scuRNN); several rotated copies of the memory
 | ideal | as above, output \|h\| |
 | idealReadout | output W_o [Re h; Im h] |
 | idealNoOmega | omega = 0: input-driven rotation only |
-| idealNoNorm | memory input i u without sqrt(1 - f^2) |
+| idealNoNorm | memory input i u instead of (1 - f) i u |
 | idealAtanRot | rotation from atan(P) as in the paper, to measure the angle map alone |
 
 ## Open questions for Keyen
@@ -64,5 +69,5 @@ U (Wolter & Yao sec. 4.4, scuRNN); several rotated copies of the memory
 - Sampling rate: answered, 250 Hz (500 samples = 2 s). omega_j = 2 pi f_j / 250
   rad per sample, with f_j log-spaced over 1 to 40 Hz (delta to low gamma), so
   omega spans about 0.025 to 1.0 rad per sample.
-- Should the output stay |h| (the paper's interface) or become a learned readout of Re and Im?
+- Output: answered, |h| as in the paper; the readout is one version.
 - Missing from the folder: Trabelsi 2018 (Deep Complex Networks: complex init and normalisation) and Orvieto 2023 (LRU). RotRNN summarises the LRU, so it is optional.
