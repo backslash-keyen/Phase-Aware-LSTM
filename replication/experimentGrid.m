@@ -37,6 +37,7 @@ if ~isempty(o.tables)
     T = T(ismember({T.id}, cellstr(o.tables)));
 end
 
+v = variantInfo(o.variant);
 keys = {};
 usedBy = containers.Map('KeyType','char','ValueType','any');
 for t = 1:numel(T)
@@ -46,7 +47,7 @@ for t = 1:numel(T)
             k = cells{c};
             if ~strcmp(k.kind, 'exp'), continue; end
             [keys, usedBy] = addKey(keys, usedBy, k, T(t).id);
-            dep = sourceDependency(k);
+            dep = sourceDependency(k, v);
             if ~isempty(dep)
                 [keys, usedBy] = addKey(keys, usedBy, dep, ['source for ' k.id]);
             end
@@ -71,7 +72,6 @@ end
 if ~isempty(o.layerNames)
     grid = grid(ismember(lower({grid.layerName}), lower(cellstr(o.layerNames))));
 end
-v = variantInfo(o.variant);
 for g = 1:numel(grid)
     grid(g).baseId = grid(g).id;
     if v.affects(grid(g)), grid(g).id = [grid(g).id v.suffixFor(grid(g))]; end

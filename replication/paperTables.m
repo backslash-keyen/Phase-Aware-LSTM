@@ -223,7 +223,12 @@ for n = 1:numel(nets)
     net = nets{n};
     for p = 1:numel(projs)
         proj = projs{p};
-        if any(strcmp(proj, {'charm','phased-lstm','complex-lstm'}))
+        if strcmp(proj, 'charm')
+            % not in the released code: the CHARM variants (charmBase = the Nov 2025
+            % layer, ported unchanged) run the CWL cells; MI CHARM stays missing
+            cwl = expKey('CWL', ncats, net, domain, proj);
+            mi  = missing('CHARM projection is not in the released code (CHARM variants cover CWL only)');
+        elseif any(strcmp(proj, {'phased-lstm','complex-lstm'}))
             cwl = missing(sprintf('%s projection is not in the released code', labels{p}));
             mi  = cwl;
         else
