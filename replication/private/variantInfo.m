@@ -59,6 +59,10 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   c3PaperOptions  path    CWL DeepRNN 3-class runs (non-phase layers) train
+%                           with get_trainingOptions_CWL_C3_DeepRNN.m and the
+%                           Nov 2025 pipeline's epochs (68 source, 50 target),
+%                           which the released get_trainingOptions.m never calls
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -75,7 +79,7 @@ for i = 1:numel(pvNames)
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer','c3PaperOptions'};
 order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
@@ -129,6 +133,13 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case 'c3PaperOptions'
+            % CWL DeepRNN 3-class options of the Nov 2025 pipeline (see the
+            % variant's get_trainingOptions.m); combines with dualSourceTransfer
+            % and targetDomain2 because it is first on the path and defers to them
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'c3PaperOptions');
+            tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
+                k.ncats == 3 && ~strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...

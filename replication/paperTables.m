@@ -130,6 +130,27 @@ t = addProjectionBlock(t, 'Phase-Aware Projections', nets, netLabel, ...
         phaseProjs, phaseLabels, 'target-domain', 3, false, true);
 T{end+1} = t;
 
+%% Extra (not a paper table) — CWL 3-class baselines on Fp1-Fz
+% The Nov 2025 HPC run scripts for the 3-class baselines
+% (L:\plstm\HPC\PhaseAwareLSTM\experiments\CWL\C3) all set
+% configs.domain = 'target-domain' (Fp1-Fz, targetdomain1/), while the
+% caption of the paper's Table 5 names F3 & F7. These cells are the runs the
+% HPC scripts describe; they are compared with the paper's Table 5 numbers.
+t = newTable('table5fp1fz', 'accuracy', ...
+    ['Replication extra (not a paper table): CWL 3-class target and projection baselines on ' ...
+     'Fp1 & Fz, the layout the Nov 2025 HPC 3-class run scripts use.']);
+t.groups = {'CWL'};
+t.rows(end+1) = newRow('NO-TL', 'DeepRNN', '', {expKey('CWL',3,'DeepRNN','target-domain','DeepRNN')});
+t.rows(end+1) = newRow('Target Baselines: TL-Common Channels', 'DeepRNN', '', ...
+    {expKey('CWL',3,'DeepRNN','target-domain','baseTransfer')});
+xproj = [projs, {'charm'}];
+xlab  = [projLabel.values(projs), {'CHARM'}];
+for p = 1:numel(xproj)
+    t.rows(end+1) = newRow('Projection Transfer', 'DeepRNN', xlab{p}, ...
+        {expKey('CWL',3,'DeepRNN','target-domain',xproj{p})});
+end
+T{end+1} = t;
+
 %% Table 8 — temporal masking (DeepRNN, binary CWL)
 t = newTable('table8', 'accuracy', ...
     'Projection transfer accuracy in target domain with temporal masking (F3 & F7) and (Fp1 & Fz) (%).');
