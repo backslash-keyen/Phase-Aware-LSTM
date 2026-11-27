@@ -3,26 +3,29 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
     %
     % N = NumComplex complex cells, held as Nh = 2N real values h = [Re; Im]
     % (Eq. 16). S = NumCopies redundant copies of the memory. Per time step:
-    %   [gf gi go ri^ ro^ u^] = W x_t + U h_{t-1} + b            (Eqs. 17-18)
-    %   gf, gi, go = sigmoid(.)  [N], applied to Re and Im alike  (Eqs. 19-21)
-    %   u  = bound(u^),  ri = key(ri^),  ro = key(ro^)            (Eqs. 23-25)
-    %   c_s = gf (.) R c_s,prev + (P_s ri) (*) (gi (.) u)          (Eqs. 26-27)
-    %   h_t = go (.) bound( 1/S sum_s (P_s ro) (*) c_s )           (Eqs. 29-30)
+    %   Z = W x_t + U h_{t-1} + b                                   (Eqs. 17-18)
+    %   gf, gi, go = sigmoid(.)  [N], applied to Re and Im alike    (Eqs. 19-21)
+    %   ri = key(ri^),  ro = key(ro^),  u = bound(u^)               (Eqs. 23-25)
+    %   c_s = gf (.) R c_s,prev + (P_s ri) (*) (gi (.) u)            (Eqs. 26-27)
+    %   h_t = go (.) bound( 1/S sum_s (P_s ro) (*) c_s )             (Eqs. 29-30)
     % bound(z) = z / max(1, |z|) per complex number (Eq. 22); (*) is complex
     % multiplication (Eq. 28); P_s are constant random permutations of the N
-    % cells, the same for Re and Im. Configuration (assocVersions.m):
-    %   keys    'bound'  key = bound(.), as the paper
-    %           'unit'   key = z/|z|, modulus exactly 1
+    % cells, the same for Re and Im (Eq. 26). Rows of Z (9N):
+    %   [gf; gi; go; Re ri^; Re ro^; Re u^; Im ri^; Im ro^; Im u^]
+    % (a fixed reordering of Eq. 17's rows, so that one normalisation serves
+    % keys and update). Configuration (assocVersions.m):
+    %   keys    'bound'  key = bound(.), as the paper;  'unit'  key = z/|z|
     %   whu     false -> the rows of U that feed u^ are zero and never trained
     %   omega   true  -> R = e^{i omega} (learned per cell, same in every copy);
     %           false -> R = 1, as the paper
-    %   output  'h'    [Re h; Im h] (2N); the builder adds a linear readout
-    %           'real' Re h (N);  'mod' |h| (N)
-    %   gradCap finite -> every learnable gradient rescaled in double to L2
-    %           norm <= gradCap (Inf/NaN -> 0) before trainNetwork sees it
+    %   output  'h' [Re h; Im h] (2N, the builder adds a linear readout),
+    %           'real' Re h (N),  'mod' |h| (N)
+    %   gradCap finite -> learnable gradients rescaled in double to L2 norm
+    %           <= gradCap before trainNetwork sees them (norms always logged)
     % States start at zero for every sequence. Forward and backward are
-    % vectorised per time step and hand-written (CPU or gpuArray);
-    % checkAssocLSTM compares them with dlgradient of a dlarray version.
+    % vectorised per time step (copies along dim 3) and hand-written, CPU or
+    % gpuArray; checkAssocLSTM compares them with dlgradient of a per-copy
+    % dlarray implementation of the equations.
 
     properties
         NumComplex
@@ -76,14 +79,14 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
 
         function layer = initialize(layer, layout)
             % Only empty learnables are drawn, so a trained layer survives.
-            % Order of the global-stream draws: W (Glorot), U (orthogonal).
+            % Global-stream draws, in order: W (Glorot), U (orthogonal).
             cfg = layer.Cfg;
             N = layer.NumComplex;
             C = layout.Size(finddim(layout, "C"));
             if isempty(layer.W), layer.W = single(initializeGlorot([9*N, C])); end
             if isempty(layer.U)
                 U = single(initializeOrthogonal([9*N, 2*N]));
-                if ~cfg.whu, U(7*N+1:9*N, :) = 0; end
+                if ~cfg.whu, U(uRows(N), :) = 0; end
                 layer.U = U;
             end
             if isempty(layer.b)
@@ -93,8 +96,8 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
             end
             if isempty(layer.omega)
                 if cfg.omega
-                    % one frequency per cell, log-spaced over 1-40 Hz (delta to
-                    % low gamma), in radians per sample at fs
+                    % one frequency per cell, log-spaced over 1-40 Hz (delta
+                    % to low gamma), in radians per sample at fs
                     fq = logspace(log10(1), log10(40), N).';
                     layer.omega = single(2*pi*fq/cfg.fs);
                 else
@@ -121,91 +124,83 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
             [C, B, T] = size(Xd, 1:3);
             W = raw(layer.W); U = raw(layer.U); om = raw(layer.omega);
             dY = raw(stripdims(dLdY));
-            idx  = layer.Perm(:);
-            iidx = reshape(layer.InvPerm + (0:S-1)*N, [], 1);   % un-permute, block by block
-            [cw, sw] = rotation(om, cfg, S);
+            [Li, Lo, Lu] = keyIndex(layer.Perm, B, N, Xd);
+            lo = normFloor(cfg, N, Xd);
+            [cw, sw] = rotation(om, cfg);
             top = 1:N; bot = N+1:2*N;
-
             Zs = memory.Z; CR = memory.cR; CI = memory.cI; Hs = memory.h;
+
             dhR = zeros(N, B, 'like', Xd); dhI = dhR;      % from step t+1 through U
-            dcR = zeros(N*S, B, 'like', Xd); dcI = dcR;
+            dcR = zeros(N, B, S, 'like', Xd); dcI = dcR;
             dZs = zeros(9*N, B, T, 'like', Xd);
             dom = zeros(N, 1, 'like', Xd);
 
             for t = T:-1:1
-                Z = Zs(:,:,t);
-                f  = sig(Z(top,:)); ig = sig(Z(bot,:)); o = sig(Z(2*N+1:3*N,:));
-                [kiR, kiI] = keyFwd(Z(3*N+1:4*N,:), Z(4*N+1:5*N,:), cfg.keys);
-                [koR, koI] = keyFwd(Z(5*N+1:6*N,:), Z(6*N+1:7*N,:), cfg.keys);
-                [uR, uI]   = boundFwd(Z(7*N+1:8*N,:), Z(8*N+1:9*N,:));
+                Z  = Zs(:,:,t);
+                sg = 1 ./ (1 + exp(-Z(1:3*N,:)));
+                f = sg(top,:); ig = sg(bot,:); o = sg(2*N+1:3*N,:);
+                A0 = Z(3*N+1:6*N,:); B0 = Z(6*N+1:9*N,:);
+                d  = max(sqrt(A0.^2 + B0.^2), lo);
+                A  = A0 ./ d; Bn = B0 ./ d;
+                KiR = A(Li); KiI = Bn(Li); KoR = A(Lo); KoI = Bn(Lo);
+                uR = A(Lu); uI = Bn(Lu);
                 vR = ig .* uR; vI = ig .* uI;
-                kiRP = kiR(idx,:); kiIP = kiI(idx,:);
-                koRP = koR(idx,:); koIP = koI(idx,:);
-                cpR = CR(:,:,t); cpI = CI(:,:,t);
+                cpR = CR(:,:,:,t); cpI = CI(:,:,:,t);
                 if cfg.omega
                     aR = cw .* cpR - sw .* cpI; aI = sw .* cpR + cw .* cpI;
                 else
                     aR = cpR; aI = cpI;
                 end
-                cR = CR(:,:,t+1); cI = CI(:,:,t+1);
-                mR = copySum(koRP .* cR - koIP .* cI, N, S, B) / S;
-                mI = copySum(koRP .* cI + koIP .* cR, N, S, B) / S;
-                [bR, bI] = boundFwd(mR, mI);
+                cR = CR(:,:,:,t+1); cI = CI(:,:,:,t+1);
+                mR = sum(KoR .* cR - KoI .* cI, 3) / S;
+                mI = sum(KoR .* cI + KoI .* cR, 3) / S;
+                dm = max(1, sqrt(mR.^2 + mI.^2));
+                bR = mR ./ dm; bI = mI ./ dm;
 
-                % output and recurrent gradient into h_t = go (.) b
+                % h_t = go (.) b, and the output
                 gR = dhR; gI = dhI;
                 switch cfg.output
-                    case 'h'
-                        gR = gR + dY(top,:,t); gI = gI + dY(bot,:,t);
-                        dgo = 0;
-                    case 'real'
-                        gR = gR + dY(:,:,t);
-                        dgo = 0;
-                    case 'mod'
-                        nb = modulus(bR, bI);
-                        dgo = dY(:,:,t) .* nb;
-                        gb = dY(:,:,t) .* o ./ nb;
+                    case 'h',    gR = gR + dY(top,:,t); gI = gI + dY(bot,:,t);
+                    case 'real', gR = gR + dY(:,:,t);
                 end
-                dgo = dgo + gR .* bR + gI .* bI;
+                dgo = gR .* bR + gI .* bI;
                 dbR = o .* gR; dbI = o .* gI;
                 if strcmp(cfg.output, 'mod')
+                    nb = sqrt(bR.^2 + bI.^2 + 1e-12);
+                    dgo = dgo + dY(:,:,t) .* nb;
+                    gb = dY(:,:,t) .* o ./ nb;
                     dbR = dbR + gb .* bR; dbI = dbI + gb .* bI;
                 end
-                [dmR, dmI] = boundBack(mR, mI, dbR, dbI, 'bound');
+                [dmR, dmI] = normBack(bR, bI, dm, dbR, dbI);
 
-                % m = 1/S sum_s ko_s (*) c_s
-                dpR = repmat(dmR, S, 1) / S; dpI = repmat(dmI, S, 1) / S;
-                dkoRP = dpR .* cR + dpI .* cI;
-                dkoIP = dpI .* cR - dpR .* cI;
-                dcR = dcR + dpR .* koRP + dpI .* koIP;
-                dcI = dcI + dpI .* koRP - dpR .* koIP;
+                % m = 1/S sum_s Ko_s (*) c_s
+                dpR = dmR / S; dpI = dmI / S;                  % broadcast over copies
+                dKoR = dpR .* cR + dpI .* cI;
+                dKoI = dpI .* cR - dpR .* cI;
+                dcR = dcR + dpR .* KoR + dpI .* KoI;
+                dcI = dcI + dpI .* KoR - dpR .* KoI;
 
-                % c_s = f (.) a_s + ki_s (*) v
-                df  = copySum(dcR .* aR + dcI .* aI, N, S, B);
-                daR = repmat(f, S, 1) .* dcR; daI = repmat(f, S, 1) .* dcI;
-                vRr = repmat(vR, S, 1); vIr = repmat(vI, S, 1);
-                dkiRP = dcR .* vRr + dcI .* vIr;
-                dkiIP = dcI .* vRr - dcR .* vIr;
-                dvR = copySum(dcR .* kiRP + dcI .* kiIP, N, S, B);
-                dvI = copySum(dcI .* kiRP - dcR .* kiIP, N, S, B);
+                % c_s = f (.) a_s + Ki_s (*) v
+                df  = sum(dcR .* aR + dcI .* aI, 3);
+                daR = f .* dcR; daI = f .* dcI;
+                dKiR = dcR .* vR + dcI .* vI;
+                dKiI = dcI .* vR - dcR .* vI;
+                dvR = sum(dcR .* KiR + dcI .* KiI, 3);
+                dvI = sum(dcI .* KiR - dcR .* KiI, 3);
                 if cfg.omega
-                    dom = dom + copySum(sum(daI .* aR - daR .* aI, 2), N, S, 1);
+                    dom = dom + sum(sum(daI .* aR - daR .* aI, 3), 2);
                     dcR = cw .* daR + sw .* daI;
                     dcI = cw .* daI - sw .* daR;
                 else
                     dcR = daR; dcI = daI;
                 end
 
-                % un-permute the key gradients
-                dkiR = copySum(dkiRP(iidx,:), N, S, B); dkiI = copySum(dkiIP(iidx,:), N, S, B);
-                dkoR = copySum(dkoRP(iidx,:), N, S, B); dkoI = copySum(dkoIP(iidx,:), N, S, B);
-                [dZkiR, dZkiI] = boundBack(Z(3*N+1:4*N,:), Z(4*N+1:5*N,:), dkiR, dkiI, cfg.keys);
-                [dZkoR, dZkoI] = boundBack(Z(5*N+1:6*N,:), Z(6*N+1:7*N,:), dkoR, dkoI, cfg.keys);
+                % back through the gathers into the normalised [ri ro u]
+                dA = [unperm(dKiR, layer.InvPerm); unperm(dKoR, layer.InvPerm); ig .* dvR];
+                dB = [unperm(dKiI, layer.InvPerm); unperm(dKoI, layer.InvPerm); ig .* dvI];
+                [dA0, dB0] = normBack(A, Bn, d, dA, dB);
                 dig = dvR .* uR + dvI .* uI;
-                [dZuR, dZuI] = boundBack(Z(7*N+1:8*N,:), Z(8*N+1:9*N,:), ig .* dvR, ig .* dvI, 'bound');
-
-                dZ = [df .* f .* (1 - f); dig .* ig .* (1 - ig); dgo .* o .* (1 - o); ...
-                      dZkiR; dZkiI; dZkoR; dZkoI; dZuR; dZuI];
+                dZ = [[df; dig; dgo] .* sg .* (1 - sg); dA0; dB0];
                 dZs(:,:,t) = dZ;
                 dh = U.' * dZ;
                 dhR = dh(top,:); dhI = dh(bot,:);
@@ -214,7 +209,7 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
             dZ2 = reshape(dZs, 9*N, B*T);
             dW = dZ2 * reshape(Xd, C, B*T).';
             dU = dZ2 * reshape(Hs(:,:,1:T), 2*N, B*T).';
-            if ~cfg.whu, dU(7*N+1:9*N, :) = 0; end
+            if ~cfg.whu, dU(uRows(N), :) = 0; end
             db = sum(dZ2, 2);
             if ~cfg.omega, dom(:) = 0; end
             dX = pagemtimes(W.', dZs);
@@ -241,51 +236,52 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
             [~, B, T] = size(Xd, 1:3);
             W = raw(layer.W); U = raw(layer.U); b = raw(layer.b); om = raw(layer.omega);
             WX = pagemtimes(W, Xd) + b;
-            idx = layer.Perm(:);
-            [cw, sw] = rotation(om, cfg, S);
+            [Li, Lo, Lu] = keyIndex(layer.Perm, B, N, WX);
+            lo = normFloor(cfg, N, WX);
+            [cw, sw] = rotation(om, cfg);
             top = 1:N; bot = N+1:2*N;
 
             h  = zeros(2*N, B, 'like', WX);
-            cR = zeros(N*S, B, 'like', WX); cI = cR;
-            switch cfg.output
-                case 'h', Yd = zeros(2*N, B, T, 'like', WX);
-                otherwise, Yd = zeros(N, B, T, 'like', WX);
-            end
+            cR = zeros(N, B, S, 'like', WX); cI = cR;
+            if strcmp(cfg.output, 'h'), Yd = zeros(2*N, B, T, 'like', WX);
+            else, Yd = zeros(N, B, T, 'like', WX); end
             if keep
                 Zs = zeros(9*N, B, T, 'like', WX);
                 Hs = zeros(2*N, B, T+1, 'like', WX);
-                CR = zeros(N*S, B, T+1, 'like', WX); CI = CR;
+                CR = zeros(N, B, S, T+1, 'like', WX); CI = CR;
             end
             for t = 1:T
-                Z = WX(:,:,t) + U * h;
-                f  = sig(Z(top,:)); ig = sig(Z(bot,:)); o = sig(Z(2*N+1:3*N,:));
-                [kiR, kiI] = keyFwd(Z(3*N+1:4*N,:), Z(4*N+1:5*N,:), cfg.keys);
-                [koR, koI] = keyFwd(Z(5*N+1:6*N,:), Z(6*N+1:7*N,:), cfg.keys);
-                [uR, uI]   = boundFwd(Z(7*N+1:8*N,:), Z(8*N+1:9*N,:));
-                vR = repmat(ig .* uR, S, 1); vI = repmat(ig .* uI, S, 1);
-                kiRP = kiR(idx,:); kiIP = kiI(idx,:);
-                koRP = koR(idx,:); koIP = koI(idx,:);
-                fr = repmat(f, S, 1);
+                Z  = WX(:,:,t) + U * h;
+                sg = 1 ./ (1 + exp(-Z(1:3*N,:)));
+                A  = Z(3*N+1:6*N,:); Bn = Z(6*N+1:9*N,:);
+                d  = max(sqrt(A.^2 + Bn.^2), lo);
+                A  = A ./ d; Bn = Bn ./ d;
+                ig = sg(bot,:);
+                vR = ig .* A(Lu); vI = ig .* Bn(Lu);
+                KiR = A(Li); KiI = Bn(Li);
                 if cfg.omega
-                    aR = cw .* cR - sw .* cI; aI = sw .* cR + cw .* cI;
-                else
-                    aR = cR; aI = cI;
+                    [cR, cI] = deal(cw .* cR - sw .* cI, sw .* cR + cw .* cI);
                 end
-                cR = fr .* aR + kiRP .* vR - kiIP .* vI;
-                cI = fr .* aI + kiRP .* vI + kiIP .* vR;
-                mR = copySum(koRP .* cR - koIP .* cI, N, S, B) / S;
-                mI = copySum(koRP .* cI + koIP .* cR, N, S, B) / S;
-                [bR, bI] = boundFwd(mR, mI);
-                h = [o .* bR; o .* bI];
+                f  = sg(top,:);
+                nR = f .* cR + KiR .* vR - KiI .* vI;
+                cI = f .* cI + KiR .* vI + KiI .* vR;
+                cR = nR;
+                KoR = A(Lo); KoI = Bn(Lo);
+                mR = sum(KoR .* cR - KoI .* cI, 3) / S;
+                mI = sum(KoR .* cI + KoI .* cR, 3) / S;
+                dm = max(1, sqrt(mR.^2 + mI.^2));
+                o  = sg(2*N+1:3*N,:);
+                hR = o .* (mR ./ dm); hI = o .* (mI ./ dm);
+                h  = [hR; hI];
                 switch cfg.output
                     case 'h',    Yd(:,:,t) = h;
-                    case 'real', Yd(:,:,t) = h(top,:);
-                    case 'mod',  Yd(:,:,t) = o .* modulus(bR, bI);
+                    case 'real', Yd(:,:,t) = hR;
+                    case 'mod',  Yd(:,:,t) = o .* sqrt((mR.^2 + mI.^2) ./ dm.^2 + 1e-12);
                 end
                 if keep
                     Zs(:,:,t) = Z;
                     Hs(:,:,t+1) = h;
-                    CR(:,:,t+1) = cR; CI(:,:,t+1) = cI;
+                    CR(:,:,:,t+1) = cR; CI(:,:,:,t+1) = cI;
                 end
             end
             Y = dlarray(Yd, 'CBT');
@@ -298,66 +294,50 @@ classdef associativeLSTMLayer < nnet.layer.Layer & nnet.layer.Formattable
     end
 end
 
+function r = uRows(N)
+% rows of Z that hold u^ (Re and Im)
+r = [5*N+1:6*N, 8*N+1:9*N];
+end
+
 function v = raw(v)
 if isa(v, 'dlarray'), v = extractdata(v); end
 end
 
-function y = sig(x)
-y = 1 ./ (1 + exp(-x));
+function [Li, Lo, Lu] = keyIndex(Perm, B, N, like)
+% Linear indices into the normalised [ri; ro; u] block (3N x B):
+% Li(j,b,s) -> ri(Perm(j,s), b), Lo the same for ro, Lu(j,b) -> u(j,b).
+S = size(Perm, 2);
+col = reshape((0:B-1) * 3*N, 1, B);
+Li = reshape(Perm, N, 1, S) + col;
+Lo = Li + N;
+Lu = (2*N + (1:N)).' + col;
+if isa(like, 'gpuArray'), Li = gpuArray(Li); Lo = gpuArray(Lo); Lu = gpuArray(Lu); end
 end
 
-function s = copySum(A, N, S, B)
-% A is [N*S x B], copies stacked in blocks of N rows -> sum over copies [N x B]
-s = reshape(sum(reshape(A, N, S, B), 2), N, B);
+function lo = normFloor(cfg, N, like)
+% d = max(|z|, lo): lo = 1 is bound() (Eq. 22); lo = 1e-6 is a unit key
+lo = ones(3*N, 1, 'like', like);
+if strcmp(cfg.keys, 'unit'), lo(1:2*N) = 1e-6; end
 end
 
-function [cw, sw] = rotation(om, cfg, S)
-if cfg.omega
-    cw = repmat(cos(om), S, 1); sw = repmat(sin(om), S, 1);
-else
-    cw = []; sw = [];
-end
+function [cw, sw] = rotation(om, cfg)
+if cfg.omega, cw = cos(om); sw = sin(om); else, cw = []; sw = []; end
 end
 
-function n = modulus(a, b)
-% |z| smoothed at 0 so that its derivative stays finite
-n = sqrt(a.^2 + b.^2 + 1e-12);
-end
-
-function [a, b] = boundFwd(a, b)
-% Eq. 22: z / max(1, |z|)
-d = max(1, sqrt(a.^2 + b.^2));
-a = a ./ d; b = b ./ d;
-end
-
-function [a, b] = keyFwd(a, b, mode)
-if strcmp(mode, 'bound')
-    [a, b] = boundFwd(a, b);
-else
-    d = max(sqrt(a.^2 + b.^2), 1e-6);
-    a = a ./ d; b = b ./ d;
+function g = unperm(G, InvPerm)
+% G(j,b,s) is the gradient of key(Perm(j,s), b): sum the copies back
+[N, B, S] = size(G);
+g = zeros(N, B, 'like', G);
+for s = 1:S
+    g = g + G(InvPerm(:, s), :, s);
 end
 end
 
-function [ga, gb] = boundBack(a, b, ga, gb, mode)
-% Jacobian of z/max(1,|z|) ('bound') or z/max(|z|,eps) ('unit'):
-% identity inside the unit disc (bound), (I - zh zh') / |z| outside.
-n = sqrt(a.^2 + b.^2);
-if strcmp(mode, 'bound')
-    act = n > 1;
-else
-    act = n > 1e-6;
-end
-ns = max(n, 1e-6);
-ah = a ./ ns; bh = b ./ ns;
-dt = ah .* ga + bh .* gb;
-na = (ga - ah .* dt) ./ ns;
-nb = (gb - bh .* dt) ./ ns;
-if strcmp(mode, 'bound')
-    ga = ga + act .* (na - ga);
-    gb = gb + act .* (nb - gb);
-else
-    ga = act .* na + (~act) .* ga / 1e-6;
-    gb = act .* nb + (~act) .* gb / 1e-6;
-end
+function [ga, gb] = normBack(an, bn, d, ga, gb)
+% z -> z/d with d = max(|z|, lo): identity/d where d = lo (|z| below the
+% floor), (I - zh zh')/|z| where d = |z|. an, bn are the normalised values.
+act = sqrt(an.^2 + bn.^2) >= 1 - 1e-6;     % normalised modulus 1 <=> d = |z|
+dt  = (an .* ga + bn .* gb) .* act;
+ga  = (ga - an .* dt) ./ d;
+gb  = (gb - bn .* dt) ./ d;
 end

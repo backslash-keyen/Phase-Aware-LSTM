@@ -37,7 +37,8 @@ L = initialize(L, networkDataLayout([C NaN NaN], 'CBT'));
 rng(7, 'twister');
 L.W = 2.0 * randn(size(L.W));
 L.U = 0.8 * randn(size(L.U));
-if ~cfg.whu, L.U(7*N+1:end, :) = 0; end
+uR = [5*N+1:6*N, 8*N+1:9*N];
+if ~cfg.whu, L.U(uR, :) = 0; end
 L.b = 0.5 * randn(size(L.b));
 if cfg.omega, L.omega = 0.3 * randn(N, 1); else, L.omega = zeros(N, 1); end
 X = dlarray(randn(C, B, T), 'CBT');
@@ -59,8 +60,9 @@ for i = 1:5
     a = double(extractdata(stripdims(g{i}))); r = double(extractdata(ref{i}));
     e = max(abs(a(:) - r(:))) / max(1e-12, max(abs(r(:))));
     if i == 3 && ~cfg.whu                              % W_hu = 0: its rows get no gradient
-        e = max(max(abs(a(7*N+1:end, :)), [], 'all'), ...
-                max(abs(a(1:7*N,:) - r(1:7*N,:)), [], 'all') / max(abs(r(:))));
+        kp = setdiff(1:9*N, uR);
+        e = max(max(abs(a(uR, :)), [], 'all'), ...
+                max(abs(a(kp,:) - r(kp,:)), [], 'all') / max(abs(r(:))));
     end
     if i == 5 && ~cfg.omega, e = max(abs(a(:))); end   % omega frozen: gradient must be 0
     ok = ok && e < 1e-8;
@@ -86,9 +88,10 @@ Y = [];
 for t = 1:T
     z  = p.W * X(:,:,t) + p.b + p.U * h;
     gf = sigmoid(z(1:N,:)); gi = sigmoid(z(N+1:2*N,:)); go = sigmoid(z(2*N+1:3*N,:));
-    [riR, riI] = key(z(3*N+1:4*N,:), z(4*N+1:5*N,:), cfg.keys);
-    [roR, roI] = key(z(5*N+1:6*N,:), z(6*N+1:7*N,:), cfg.keys);
-    [uR, uI]   = bnd(z(7*N+1:8*N,:), z(8*N+1:9*N,:));
+    % rows: [gf gi go | Re ri, Re ro, Re u | Im ri, Im ro, Im u]
+    [riR, riI] = key(z(3*N+1:4*N,:), z(6*N+1:7*N,:), cfg.keys);
+    [roR, roI] = key(z(4*N+1:5*N,:), z(7*N+1:8*N,:), cfg.keys);
+    [uR, uI]   = bnd(z(5*N+1:6*N,:), z(8*N+1:9*N,:));
     vR = gi .* uR; vI = gi .* uI;
     mR = 0; mI = 0;
     for s = 1:S
@@ -136,15 +139,16 @@ L = associativeLSTMLayer(N, 'Cfg', cfg, 'Version', 'copies1');
 L = initialize(L, networkDataLayout([C NaN NaN], 'CBT'));
 rng(3, 'twister');
 L.W = 0.3 * randn(size(L.W)); L.U = 0.2 * randn(size(L.U)); L.b = zeros(size(L.b));
-L.W(3*N+1:7*N, :) = 0; L.U(3*N+1:7*N, :) = 0;      % key pre-activations fixed ...
-L.b(3*N+1:4*N) = 1; L.b(5*N+1:6*N) = 1;              % ... at 1 + 0i
+kr = [3*N+1:5*N, 6*N+1:8*N];
+L.W(kr, :) = 0; L.U(kr, :) = 0;                      % key pre-activations fixed ...
+L.b(3*N+1:5*N) = 1;                                  % ... at 1 + 0i
 X = randn(C, B, T) * 0.3;
 Y = extractdata(predict(L, dlarray(X, 'CBT')));
 h = zeros(2*N, B); cR = zeros(N, B); cI = cR; err = 0;
 for t = 1:T
     z = L.W * X(:,:,t) + L.b + L.U * h;
     f = 1./(1+exp(-z(1:N,:))); i = 1./(1+exp(-z(N+1:2*N,:))); o = 1./(1+exp(-z(2*N+1:3*N,:)));
-    [uR, uI] = bnd(z(7*N+1:8*N,:), z(8*N+1:9*N,:));
+    [uR, uI] = bnd(z(5*N+1:6*N,:), z(8*N+1:9*N,:));
     cR = f .* cR + i .* uR; cI = f .* cI + i .* uI;
     [bR, bI] = bnd(cR, cI);
     h = [o .* bR; o .* bI];
