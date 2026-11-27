@@ -59,6 +59,10 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   miHPCOptions    path    MI (2a -> 2b) runs use the authors' Graz_* option files
+%                           (EEGNet/Transformer ported from L:\plstm) with the
+%                           epochs stored in the HPC MI results (DeepRNN 30/2,
+%                           phase layers 30; EEGNet 30/15; Transformer 50/15)
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -75,7 +79,7 @@ for i = 1:numel(pvNames)
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer','miHPCOptions'};
 order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
@@ -83,8 +87,8 @@ if ~isempty(unknown)
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
-    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
+if nnz(ismember({'miHPCOptions','phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
+    error('replication:variantConflict', 'miHPCOptions, phaseAwareOptions, targetDomain2, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
 end
 speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) + numel(pvNames) > 1
@@ -129,6 +133,9 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case 'miHPCOptions'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'miHPCOptions');
+            tests{end+1} = @(k) strcmpi(k.datasetType, 'MI'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...
