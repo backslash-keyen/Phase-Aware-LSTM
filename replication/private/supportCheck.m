@@ -22,7 +22,7 @@ if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
     end
     return
 end
-if strcmpi(k.layerName, 'baseTransfer')
+if strcmpi(k.layerName, 'baseTransfer') && ~(isfield(v, 'names') && any(strcmp(v.names, 'dualSourceTransfer')))
     ok = false;
     reason = ['define_layerArchitecture.m has no builder for layer "baseTransfer" ' ...
               '(common-channel selection), which get_pretrainedLayers.m loads'];

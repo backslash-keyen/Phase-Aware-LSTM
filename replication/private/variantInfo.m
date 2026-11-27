@@ -75,7 +75,7 @@ for i = 1:numel(pvNames)
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions'};
+order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
 order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
@@ -83,8 +83,8 @@ if ~isempty(unknown)
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'}, names)) + numel(pvNames) > 1
-    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2 and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
+if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
+    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
 end
 speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'};
 if nnz(ismember(names, speedVariants)) + numel(pvNames) > 1
@@ -108,6 +108,12 @@ for i = 1:numel(names)
             % in front of a pretrained source network
             tests{end+1} = @(k) ~startsWith(lower(k.domain), 'source') && ...
                 any(strcmpi(k.layerName, {'ffnn','lstm','gru','phase-lstm'})); %#ok<AGROW>
+        case 'dualSourceTransfer'
+            % beyond the released code: train the dual-channel (Fp1-Fz) source
+            % and fine-tune it on the target (baseTransfer actually transfers)
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'dualSourceTransfer');
+            v.extraDomains{end+1} = 'source-domain-2';
+            tests{end+1} = @(k) strcmpi(k.domain, 'source-domain-2') || strcmpi(k.layerName, 'baseTransfer'); %#ok<AGROW>
         case 'targetDomain2'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'targetDomain2');
             v.extraDomains{end+1} = 'target-domain-2';
