@@ -11,7 +11,7 @@ if strcmpi(k.datasetType, 'MI') && any(strcmpi(k.typeNet, {'EEGNet','transformer
         ~(isfield(v, 'names') && any(strcmp(v.names, 'miHPCOptions')))
     ok = false;
     reason = sprintf(['get_trainingOptions.m calls get_trainingOptions_Graz_%s, ' ...
-                      'which is not in the repository; run with ''variant'', ''miHPCOptions''], k.typeNet);
+                      'which is not in the repository; run with ''variant'', ''miHPCOptions'''], k.typeNet);
     return
 end
 if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
