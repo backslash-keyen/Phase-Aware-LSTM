@@ -83,6 +83,20 @@ cap keeps the direction, caps the norm and zeroes Inf/NaN.
 
 Fold 2 first, then 10 folds. Filled in as runs finish.
 
+Every version below runs on fold 2 and then on all 10 folds, the paper version included.
+
 | version | fold 2 val | fold 2 test | phase layer trained | 10-fold test |
 |---|---|---|---|---|
-| paper | | | | |
+| paper (notrigPhaseLSTM) | | | | |
+| port | | | | |
+| gradCap | | | | |
+| forgetRow | | | | |
+| noPhaseBias | | | | |
+| cosSin | | | | |
+| complexH | | | | |
+| lowRec | | | | |
+| ideal | | | | |
+| idealReadout | | | | |
+| idealNoOmega | | | | |
+| idealNoNorm | | | | |
+| idealAtanRot | | | | |
