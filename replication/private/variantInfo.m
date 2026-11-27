@@ -59,6 +59,10 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   pc_<version>    path    the paper's notrig layer with tracked corrections
+%                           (replication/phaseLayer, phaseAwareLSTMCorr; e.g.
+%                           pc_port, pc_gradCap, pc_complexH), trained with the
+%                           tuned options; see replication/phaseLayer/README.md
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -70,24 +74,31 @@ if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretraine
 names = cellstr(names);
 pvDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'versions', 'fast');
 pvNames = names(startsWith(names, 'pv_'));
+pcDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'phaseLayer');
+pcNames = names(startsWith(names, 'pc_'));
+for i = 1:numel(pcNames)
+    if ~isfolder(fullfile(pcDir, 'versions', extractAfter(pcNames{i}, 'pc_')))
+        error('replication:unknownVariant', 'Unknown phase-layer correction version %s (folders in %s).', pcNames{i}, fullfile(pcDir, 'versions'));
+    end
+end
 for i = 1:numel(pvNames)
     if ~isfolder(fullfile(pvDir, extractAfter(pvNames{i}, 'pv_'))) || strcmp(pvNames{i}, 'pv_common')
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
 order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions'};
-order = [order, sort(pvNames)];
+order = [order, sort(pvNames), sort(pcNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'}, names)) + numel(pvNames) > 1
+if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'}, names)) + numel(pvNames) + numel(pcNames) > 1
     error('replication:variantConflict', 'phaseAwareOptions, targetDomain2 and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
 end
 speedVariants = {'fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM'};
-if nnz(ismember(names, speedVariants)) + numel(pvNames) > 1
+if nnz(ismember(names, speedVariants)) + numel(pvNames) + numel(pcNames) > 1
     error('replication:variantConflict', 'Use at most one of %s.', strjoin(speedVariants, ', '));
 end
 
@@ -122,6 +133,10 @@ for i = 1:numel(names)
         case pvNames
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
+            tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case pcNames
+            v.dirs{end+1} = fullfile(pcDir, 'common');
+            v.dirs{end+1} = fullfile(pcDir, 'versions', extractAfter(names{i}, 'pc_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
