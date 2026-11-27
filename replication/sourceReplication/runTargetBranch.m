@@ -31,9 +31,7 @@ parse(p, varargin{:});
 o = p.Results;
 for k = 1:numel(o.layers)
     id = sprintf('cwl_N%d_%s_DeepRNN_%s', o.ncats, o.domain, o.layers{k});
-    fprintf('
-===== %s, folds %s =====
-', id, mat2str(folds));
+    fprintf('\n===== %s, folds %s =====\n', id, mat2str(folds));
     rr = {'rngType', o.rngType};
     if ~isempty(o.variant), rr = [rr, {'variant', o.variant}]; end
     runReplication('ids', {id}, 'folds', folds, rr{:});
