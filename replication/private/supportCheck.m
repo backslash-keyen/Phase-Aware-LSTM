@@ -22,6 +22,21 @@ if ~any(strcmpi(k.domain, [{'source-domain','target-domain'}, v.extraDomains]))
     end
     return
 end
+if strcmpi(k.layerName, 'charm')
+    names = {};
+    if isfield(v, 'names'), names = v.names; end
+    if ~any(ismember({'charmBase','charm3Conv','charmInstNorm','charmSourceTrained'}, names))
+        ok = false;
+        reason = ['the CHARM projection is not in the released code; run with ''variant'', ' ...
+                  '''charmBase'' (the Nov 2025 layer, ported unchanged) or charm3Conv / charmInstNorm / charmSourceTrained'];
+        return
+    end
+    if startsWith(lower(k.domain), 'source') && ~any(strcmp(names, 'charmSourceTrained'))
+        ok = false;
+        reason = 'a source run with CHARM exists only for charmSourceTrained';
+        return
+    end
+end
 if strcmpi(k.layerName, 'baseTransfer')
     ok = false;
     reason = ['define_layerArchitecture.m has no builder for layer "baseTransfer" ' ...
