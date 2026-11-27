@@ -19,7 +19,7 @@ classdef phaseAwareLSTMIdeal < nnet.layer.Layer & nnet.layer.Formattable
     properties
         NumHiddenUnits
         OutputMode
-        Version
+        VersionId
         Cfg
     end
     properties (Learnable)
@@ -49,9 +49,9 @@ classdef phaseAwareLSTMIdeal < nnet.layer.Layer & nnet.layer.Formattable
             layer.NumHiddenUnits = numHiddenUnits;
             layer.Name = args.Name;
             layer.OutputMode = args.OutputMode;
-            layer.Version = char(args.Version);
-            if isempty(args.Cfg), layer.Cfg = phaseCorrVersions(layer.Version); else, layer.Cfg = args.Cfg; end
-            layer.Description = "Ideal complex LSTM (" + layer.Version + ") with " + numHiddenUnits + " hidden units";
+            layer.VersionId = char(args.Version);
+            if isempty(args.Cfg), layer.Cfg = phaseCorrVersions(layer.VersionId); else, layer.Cfg = args.Cfg; end
+            layer.Description = "Ideal complex LSTM (" + layer.VersionId + ") with " + numHiddenUnits + " hidden units";
         end
 
         function layer = initialize(layer, layout)

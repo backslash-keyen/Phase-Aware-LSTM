@@ -38,7 +38,7 @@ classdef phaseAwareLSTMCorr < nnet.layer.Layer & nnet.layer.Formattable
     properties
         NumHiddenUnits
         OutputMode
-        Version
+        VersionId
         Cfg
     end
 
@@ -70,13 +70,13 @@ classdef phaseAwareLSTMCorr < nnet.layer.Layer & nnet.layer.Formattable
             layer.NumHiddenUnits = numHiddenUnits;
             layer.Name           = args.Name;
             layer.OutputMode     = args.OutputMode;
-            layer.Version        = char(args.Version);
+            layer.VersionId        = char(args.Version);
             if isempty(args.Cfg)
-                layer.Cfg = phaseCorrVersions(layer.Version);
+                layer.Cfg = phaseCorrVersions(layer.VersionId);
             else
                 layer.Cfg = args.Cfg;
             end
-            layer.Description = "Phase-aware LSTM (" + layer.Version + ") with " + numHiddenUnits + " hidden units";
+            layer.Description = "Phase-aware LSTM (" + layer.VersionId + ") with " + numHiddenUnits + " hidden units";
         end
 
         function layer = initialize(layer, layout)
