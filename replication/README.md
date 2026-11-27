@@ -164,3 +164,7 @@ runAll('variant',{'authorSource','targetDomain2'},'datasets','CWL','ncats',2,'ty
 | `buildTables.m` | Tables (.csv, .md, .tex) and paired t-tests |
 | `runAll.m`, `../replicatePaper.m` | One-call entry points |
 | `private/` | Helpers: path mirrors of the original loaders, hashing, t-test |
+
+## Beyond the paper: Associative LSTM projection
+
+The Associative LSTM (Danihelka et al. 2016) is added as a further projection baseline for the CWL DeepRNN Fp1-Fz cell (table id `assocLSTM`, layer `assoc-lstm`). It runs only with an `al_<version>` variant; see [assocLSTM/README.md](assocLSTM/README.md).
