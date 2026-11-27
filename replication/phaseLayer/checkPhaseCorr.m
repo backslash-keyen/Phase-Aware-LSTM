@@ -49,33 +49,53 @@ clear cleanup
 % ---- 2./3. every version vs plain dlarray ----------------------------------
 list = phaseCorrVersions();
 for k = 1:numel(list)
-    cfg = phaseCorrVersions(list(k).id);
+    id = list(k).id;
+    cfg = phaseCorrVersions(id);
     cfgNoCap = cfg; cfgNoCap.gradCap = Inf;
+    isIdeal = startsWith(id, 'ideal');
     rng(1);
-    net = dlnetwork([sequenceInputLayer(C); phaseAwareLSTMCorr(H, 'Name', 'p', 'Version', list(k).id, 'Cfg', cfgNoCap)]);
-    L = net.Layers(2);
-    % initial biases / sizes
-    b1 = extractdata(L.b1); b2 = extractdata(L.b2);
-    eb1 = zeros(4*H,1); if strcmp(cfg.forgetRow, 'f'), eb1(1:H) = 1; else, eb1(H+1:2*H) = 1; end
-    eb2 = zeros(4*H,1); if strcmp(cfg.phaseBias, 'unitForget'), eb2(H+1:2*H) = 1; end
-    qw = H * (1 + ~strcmp(cfg.feedback, 'atan2'));
-    initOk = isequal(double(b1), eb1) && isequal(double(b2), eb2) && isequal(size(L.Q), [4*H, qw]);
+    if isIdeal
+        net = dlnetwork([sequenceInputLayer(C); phaseAwareLSTMIdeal(H, 'Name', 'p', 'Version', id, 'Cfg', cfgNoCap)]);
+        L = net.Layers(2);
+        eb = zeros(6*H,1); eb(1:H) = 1;
+        initOk = isequal(double(extractdata(L.b)), eb) && isequal(size(L.Uz), [6*H, 2*H]) && ...
+            (cfg.omega == any(extractdata(L.omega) ~= 0));
+    else
+        net = dlnetwork([sequenceInputLayer(C); phaseAwareLSTMCorr(H, 'Name', 'p', 'Version', id, 'Cfg', cfgNoCap)]);
+        L = net.Layers(2);
+        b1 = extractdata(L.b1); b2 = extractdata(L.b2);
+        eb1 = zeros(4*H,1); if strcmp(cfg.forgetRow, 'f'), eb1(1:H) = 1; else, eb1(H+1:2*H) = 1; end
+        eb2 = zeros(4*H,1); if strcmp(cfg.phaseBias, 'unitForget'), eb2(H+1:2*H) = 1; end
+        qw = H * (1 + ~strcmp(cfg.feedback, 'atan2'));
+        initOk = isequal(double(b1), eb1) && isequal(double(b2), eb2) && isequal(size(L.Q), [4*H, qw]);
+    end
     net = dlupdate(@double, net);
     % moderate random weights so every branch is exercised (no clipping at +-5 mostly)
     rng(3);
     net = dlupdate(@(v) v + 0.3*randn(size(v)), net);
+    if isIdeal && ~cfg.omega      % omega is fixed at 0 in this version
+        Lt = net.Learnables;
+        Lt.Value{strcmp(Lt.Parameter, 'omega')} = dlarray(zeros(H, 1));
+        net.Learnables = Lt;
+    end
     X = dlarray(Xn, 'CBT');
     [yC, gC] = dlfeval(@lossGrad, net, X, Wn);
-    [yR, gR] = dlfeval(@lossGradRef, net.Learnables, X, Wn, cfg, H);
+    [yR, gR] = dlfeval(@lossGradRef, net.Learnables, X, Wn, cfg, H, isIdeal);
+    if isIdeal && ~cfg.omega
+        gR.Value{strcmp(gR.Parameter, 'omega')} = 0 * gR.Value{strcmp(gR.Parameter, 'omega')};
+    end
+    if isIdeal && strcmp(cfg.output, 'mag')     % Wo, bo unused
+        for nm = {'Wo','bo'}, gR.Value{strcmp(gR.Parameter, nm{1})} = 0 * gR.Value{strcmp(gR.Parameter, nm{1})}; end
+    end
     dY = maxRel(yR, yC); dG = maxGradRel(gR, gC);
-    ok = report(sprintf('%-12s vs dlarray: init %d, output %.1e, grads %.1e', list(k).id, initOk, dY, dG), ...
+    ok = report(sprintf('%-12s vs dlarray: init %d, output %.1e, grads %.1e', id, initOk, dY, dG), ...
         initOk && dY < tolF && dG < 1e-7) && ok;
     if useGpu
         netG = dlupdate(@(v) gpuArray(single(v)), net);
         XG = dlarray(gpuArray(single(Xn)), 'CBT');
         [yG, gG] = dlfeval(@lossGrad, netG, XG, gpuArray(single(Wn)));
         dYg = maxRel(yR, yG); dGg = maxGradRel(gR, gG);
-        ok = report(sprintf('%-12s GPU single: output %.1e, grads %.1e', list(k).id, dYg, dGg), ...
+        ok = report(sprintf('%-12s GPU single: output %.1e, grads %.1e', id, dYg, dGg), ...
             dYg < 1e-4 && dGg < 1e-2) && ok;
     end
 end
@@ -98,10 +118,14 @@ loss = sum(stripdims(Y) .* w, 'all');
 g = dlgradient(loss, net.Learnables);
 end
 
-function [y, g] = lossGradRef(learn, X, w, cfg, H)
+function [y, g] = lossGradRef(learn, X, w, cfg, H, isIdeal)
 P = struct();
 for i = 1:height(learn), P.(learn.Parameter{i}) = learn.Value{i}; end
-Y = refForward(P, stripdims(X), cfg, H);
+if isIdeal
+    Y = refIdeal(P, stripdims(X), cfg, H);
+else
+    Y = refForward(P, stripdims(X), cfg, H);
+end
 y = extractdata(Y);
 loss = sum(Y .* w, 'all');
 g = learn;
@@ -140,6 +164,30 @@ for t = 1:T
         case 'complexH', z = [o .* tanh(rho) ./ rho .* cR; o .* tanh(rho) ./ rho .* cI];
     end
     Y = cat(3, Y, h);
+end
+end
+
+function Y = refIdeal(P, X, cfg, H)
+% Independent implementation of phaseAwareLSTMIdeal: polar form for bound(),
+% explicit cos/sin rotation; autodiff gives the gradients.
+[~, B, T] = size(X);
+z = zeros(2*H, B, 'like', X); cR = zeros(H, B, 'like', X); cI = cR;
+Y = [];
+for t = 1:T
+    A = P.Wx * X(:,:,t) + P.Uz * z + P.b;
+    f = sigmoid(A(1:H,:)); ig = sigmoid(A(H+1:2*H,:)); o = sigmoid(A(2*H+1:3*H,:));
+    vR = A(3*H+1:4*H,:); vI = A(4*H+1:5*H,:);
+    mv = sqrt(vR.^2 + vI.^2);
+    uR = tanh(mv) .* vR ./ mv; uI = tanh(mv) .* vI ./ mv;
+    if strcmp(cfg.rotMap, 'piTanh'), th = P.omega + pi * tanh(A(5*H+1:6*H,:)); else, th = P.omega + atan(A(5*H+1:6*H,:)); end
+    if strcmp(cfg.inputScale, 'coupled'), s = 1 - f; else, s = 1; end
+    nR = f .* (cos(th) .* cR - sin(th) .* cI) + s .* ig .* uR;
+    nI = f .* (sin(th) .* cR + cos(th) .* cI) + s .* ig .* uI;
+    cR = nR; cI = nI;
+    rho = sqrt(cR.^2 + cI.^2);
+    z = [o .* tanh(rho) .* cR ./ rho; o .* tanh(rho) .* cI ./ rho];
+    if strcmp(cfg.output, 'readout'), y = P.Wo * z + P.bo; else, y = o .* tanh(rho); end
+    Y = cat(3, Y, y);
 end
 end
 

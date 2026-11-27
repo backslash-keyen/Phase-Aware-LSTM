@@ -9,7 +9,8 @@ clear restore
 old = layers.Layers(strcmp({layers.Layers.Name}, 'phaseLSTM'));
 assert(isscalar(old) && isa(old, 'phaseAwareLSTM'), ...
     'swapPhaseCorr: expected one phaseAwareLSTM layer named ''phaseLSTM''.');
-fprintf('[pc] phase layer = phaseAwareLSTMCorr version %s\n', versionId);
-layers = replaceLayer(layers, 'phaseLSTM', phaseAwareLSTMCorr(old.NumHiddenUnits, ...
+if startsWith(versionId, 'ideal'), ctor = @phaseAwareLSTMIdeal; else, ctor = @phaseAwareLSTMCorr; end
+fprintf('[pc] phase layer = %s version %s\n', func2str(ctor), versionId);
+layers = replaceLayer(layers, 'phaseLSTM', ctor(old.NumHiddenUnits, ...
     'Name', old.Name, 'OutputMode', old.OutputMode, 'Version', versionId));
 end

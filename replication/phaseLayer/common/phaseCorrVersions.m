@@ -21,6 +21,12 @@ V = {
 'cosSin'            'gradCap'   'phase gates see [cos; sin] of angle(c) instead of atan2 (no 2 pi jump; still 1/|c| in the derivative); Q is 4H x 2H' [cap, {'feedback', 'cosSin'}]
 'complexH'          'gradCap'   'phase gates see the complex hidden state o tanh(|c|) e^{i angle(c)} (bounded, smooth at c = 0, no 1/|c|); Q is 4H x 2H' [cap, {'feedback', 'complexH'}]
 'lowRec'            'gradCap'   'U and Q drawn at 0.5x scale (recurrent gain over 500 steps)' [cap, {'recScale', 0.5}]
+% ideal complex LSTM (phaseAwareLSTMIdeal, IDEAL_LAYER.md); each later one = ideal + one change
+'ideal'             '-'         'ideal complex LSTM: real gates, bounded complex candidate and hidden, rotation omega + pi tanh, decaying coupled memory, [Re h; Im h] fed back, output |h|' cap
+'idealReadout'      'ideal'     'output Wo [Re h; Im h] + bo instead of |h|' [cap, {'output', 'readout'}]
+'idealNoOmega'      'ideal'     'omega = 0 (not trained): input-driven rotation only' [cap, {'omega', false}]
+'idealNoNorm'       'ideal'     'memory input i u instead of (1 - f) i u' [cap, {'inputScale', 'plain'}]
+'idealAtanRot'      'ideal'     'rotation omega + atan(A_r) (the paper''s angle map) instead of omega + pi tanh(A_r)' [cap, {'rotMap', 'atan'}]
 };
 list = struct('id', V(:,1), 'parent', V(:,2), 'change', V(:,3), 'set', V(:,4));
 if nargin == 0
@@ -31,7 +37,11 @@ k = find(strcmp({list.id}, id));
 if isempty(k)
     error('phaseCorrVersions:unknown', 'Unknown version %s. Known: %s.', id, strjoin({list.id}, ', '));
 end
-out = phaseCorrConfig(list(k).set{:});
+if startsWith(id, 'ideal')
+    out = phaseIdealConfig(list(k).set{:});
+else
+    out = phaseCorrConfig(list(k).set{:});
+end
 out.id = id;
 end
 
@@ -49,4 +59,20 @@ cfg = p.Results;
 assert(any(strcmp(cfg.forgetRow, {'i','f'})));
 assert(any(strcmp(cfg.phaseBias, {'unitForget','zero'})));
 assert(any(strcmp(cfg.feedback,  {'atan2','cosSin','complexH'})));
+end
+
+function cfg = phaseIdealConfig(varargin)
+% Defaults = the ideal layer (IDEAL_LAYER.md).
+p = inputParser;
+addParameter(p, 'gradCap',    Inf);
+addParameter(p, 'output',     'mag');       % 'mag' | 'readout'
+addParameter(p, 'omega',      true);
+addParameter(p, 'inputScale', 'coupled');   % 'coupled' (1 - f) | 'plain'
+addParameter(p, 'rotMap',     'piTanh');    % 'piTanh' | 'atan'
+addParameter(p, 'fs',         250);         % CWL sampling rate (Hz)
+parse(p, varargin{:});
+cfg = p.Results;
+assert(any(strcmp(cfg.output, {'mag','readout'})));
+assert(any(strcmp(cfg.inputScale, {'coupled','plain'})));
+assert(any(strcmp(cfg.rotMap, {'piTanh','atan'})));
 end

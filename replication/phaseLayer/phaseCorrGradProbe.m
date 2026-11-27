@@ -25,13 +25,14 @@ list = phaseCorrVersions();
 ids = o.ids; if isempty(ids), ids = {list.id}; end
 S = load(fullfile(root, 'datasets', 'folds', 'CWL', 'NEC21_C2', 'targetdomain1', sprintf('target_fold%d.mat', o.fold)), 'xtrain');
 X0 = single(S.xtrain(:, :, 1:o.nTrials)); clear S
-names = {'W1','W2','U','Q','b1','b2'};
+names = {'W1|Wx','W2|Uz','U|b','Q|omega','b1|Wo','b2|bo'};
 R = struct('id', {}, 'T', {}, 'norms', {});
 fprintf('%-12s %4s  %s\n', 'version', 'T', strjoin(compose('%9s', string(names)), ' '));
 for k = 1:numel(ids)
     cfg = phaseCorrVersions(ids{k}); cfg.gradCap = Inf;
     rng(o.fold);
-    net = dlnetwork([sequenceInputLayer(2); phaseAwareLSTMCorr(61, 'Name', 'phaseLSTM', 'Version', ids{k}, 'Cfg', cfg)]);
+    if startsWith(ids{k}, 'ideal'), ctor = @phaseAwareLSTMIdeal; else, ctor = @phaseAwareLSTMCorr; end
+    net = dlnetwork([sequenceInputLayer(2); ctor(61, 'Name', 'phaseLSTM', 'Version', ids{k}, 'Cfg', cfg)]);
     if canUseGPU, net = dlupdate(@gpuArray, net); end
     for T = o.T
         X = dlarray(permute(X0(:, 1:T, :), [1 3 2]), 'CBT');
