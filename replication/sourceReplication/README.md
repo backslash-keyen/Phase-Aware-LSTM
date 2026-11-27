@@ -87,12 +87,14 @@ Fold 1, branch hpc (the paper's exact source nets):
 
 The training options, the architecture and the starting source net are identical to the HPC run. Both runs fine-tune the transferred source layers far from their start: the soft freeze in `freezeFunctionalLayers.m` is a no-op in both. So the fold-level differences come from the training trajectory (GPU numerics). No transfer, which starts from scratch, agrees to within 0.1 point. A single fold can't separate that noise from a real gap, so the 10-fold means are the test.
 
-10-fold means (test %):
+10-fold means (val / test %, 27 Nov 2026, R2025b):
 
-| baseline | paper / HPC | branch hpc | branch ours |
+| baseline | paper / HPC | branch hpc (paper's source nets) | branch ours (threefry retrain) |
 |---|---|---|---|
-| no transfer | 56.29 | | |
-| FFNN projection | 57.06 | | |
-| LSTM projection | 56.61 | | |
-| GRU projection | 54.74 | | |
-| (dual-channel transfer: equals no transfer in the paper's results, not runnable) | 56.29 | — | — |
+| no transfer | 59.52 / 56.29 | 58.15 / 54.78 | 58.15 / 54.78 |
+| FFNN projection | 60.96 / 57.06 | 59.98 / 56.06 | 60.13 / 55.76 |
+| LSTM projection | 62.28 / 56.61 | 62.14 / 57.68 | 62.13 / 57.20 |
+| GRU projection | 58.66 / 54.74 | 59.39 / 55.74 | 58.44 / 54.81 |
+| dual-channel transfer | 59.52 / 56.29 (= no transfer) | not runnable | not runnable |
+
+Every mean test accuracy lies within 1.5 points of the paper. The mean absolute per-fold difference from the HPC run is 0.5 to 2.7 points, which is the platform noise of a single fine-tuning run. No transfer doesn't use a source net, so it comes out identical in both branches. Its 1.5-point gap from the HPC is therefore pure Windows-vs-HPC training noise. All four baselines fall between 54.7 and 57.7 in every column. Their order differs between columns: the paper has FFNN > LSTM > no transfer > GRU, while both branches have LSTM first. So the paper's small gaps between these baselines, about 2 points, are not resolved by a single 10-fold run.
