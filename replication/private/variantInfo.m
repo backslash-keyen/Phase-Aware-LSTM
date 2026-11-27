@@ -59,6 +59,10 @@ function v = variantInfo(names, sourceModelRoot)
 %                           (replication/versions/fast/<version>, e.g.
 %                           pv_ver1, pv_cstmArch2Apr25), trained with the tuned
 %                           options; see replication/versions/README.md
+%   al_<version>    path    Associative LSTM projection (Danihelka et al. 2016;
+%                           not in the paper or the released code), layer
+%                           'assoc-lstm'; replication/assocLSTM/versions/<version>,
+%                           e.g. al_paper, al_ideal; see replication/assocLSTM/README.md
 %   phaseAwareOptions path  CWL DeepRNN phase-lstm target runs train with the
 %                           shipped get_trainingOptions_CWL_C2_PhaseAware.m,
 %                           which the released get_trainingOptions.m never calls
@@ -70,13 +74,23 @@ if nargin < 2 || isempty(sourceModelRoot), sourceModelRoot = 'M:\Earth\pretraine
 names = cellstr(names);
 pvDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'versions', 'fast');
 pvNames = names(startsWith(names, 'pv_'));
+alDir = fullfile(fileparts(fileparts(mfilename('fullpath'))), 'assocLSTM');
+alNames = names(startsWith(names, 'al_'));
+for i = 1:numel(alNames)
+    if ~isfolder(fullfile(alDir, 'versions', extractAfter(alNames{i}, 'al_')))
+        error('replication:unknownVariant', 'Unknown Associative LSTM version %s (folders in %s).', alNames{i}, fullfile(alDir, 'versions'));
+    end
+end
+if numel(alNames) > 1
+    error('replication:variantConflict', 'Use at most one Associative LSTM version (al_*).');
+end
 for i = 1:numel(pvNames)
     if ~isfolder(fullfile(pvDir, extractAfter(pvNames{i}, 'pv_'))) || strcmp(pvNames{i}, 'pv_common')
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
 order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','dualSourceTransfer'};
-order = [order, sort(pvNames)];
+order = [order, sort(pvNames), alNames];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
     error('replication:unknownVariant', 'Unknown variant(s): %s. Known: %s.', ...
@@ -129,6 +143,10 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(pvDir, 'common');
             v.dirs{end+1} = fullfile(pvDir, extractAfter(names{i}, 'pv_'));
             tests{end+1} = @(k) strcmpi(k.layerName, 'phase-lstm'); %#ok<AGROW>
+        case alNames
+            v.dirs{end+1} = fullfile(alDir, 'common');
+            v.dirs{end+1} = fullfile(alDir, 'versions', extractAfter(names{i}, 'al_'));
+            tests{end+1} = @(k) strcmpi(k.layerName, 'assoc-lstm'); %#ok<AGROW>
         case 'phaseAwareOptions'
             v.dirs{end+1} = fullfile(repDir, 'variants', 'phaseAwareOptions');
             tests{end+1} = @(k) strcmpi(k.datasetType, 'CWL') && strcmpi(k.typeNet, 'DeepRNN') && ...

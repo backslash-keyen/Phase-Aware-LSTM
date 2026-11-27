@@ -192,6 +192,17 @@ for n = 1:2   % DeepRNN, EEGNet only in the paper
 end
 T{end+1} = t;
 
+%% Beyond the paper — Associative LSTM projection (CWL Fp1-Fz, binary)
+% Not in the paper: Danihelka et al. (2016) as a further projection baseline
+% next to FFNN / LSTM / GRU. Runs only with an al_<version> variant
+% (replication/assocLSTM); without one the cell is reported as unsupported.
+t = newTable('assocLSTM', 'accuracy', ...
+    'Not in the paper: Associative LSTM projection (Danihelka et al. 2016), CWL target domain (Fp1 & Fz), binary (%).');
+t.groups = {'CWL'};
+t.rows(end+1) = newRow('Projection Transfer', 'DeepRNN', 'Associative-LSTM', ...
+    {expKey('CWL',2,'DeepRNN','target-domain','assoc-lstm')});
+T{end+1} = t;
+
 T = [T{:}];
 end
 
