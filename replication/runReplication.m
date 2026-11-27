@@ -226,11 +226,11 @@ for g = 1:numel(grid)
     end
     row.ncval = ncval;
 
-    dep = sourceDependency(k);
+    dep = sourceDependency(k, v);
     if ~isempty(dep)
         missingFolds = [];
         for i = 1:ncval
-            if ~isfile(pretrainedFile(projectLoc, k, i, v.sourceModelRoot)), missingFolds(end+1) = i; end %#ok<AGROW>
+            if ~isfile(pretrainedFile(projectLoc, k, i, v.sourceModelRoot, v)), missingFolds(end+1) = i; end %#ok<AGROW>
         end
         if ~isempty(missingFolds)
             row.status  = 'blocked';

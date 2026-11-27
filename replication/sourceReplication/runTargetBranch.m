@@ -15,16 +15,25 @@ function runTargetBranch(folds, varargin)
 %   paper's HPC results its trained nets are bit-identical to the no-transfer
 %   nets, so the paper's baseTransfer row equals no transfer (see README).
 %
+%   runTargetBranch(1, 'ncats', 3, 'layers', {'deeprnn','basetransfer'}, ...
+%                   'variant', {'dualSourceTransfer','c3PaperOptions'})
+%                             % CWL 3-class (source nets in pretrainedModels/cwl/cwl2/DeepRNN)
+%
 %   Order: no transfer, then the FFNN, LSTM and GRU projections. Phase-aware projections are not run here.
 
 p = inputParser;
 addParameter(p, 'rngType', 'threefry');
 addParameter(p, 'layers',  {'deeprnn','ffnn','lstm','gru'});
+addParameter(p, 'ncats',   2);
+addParameter(p, 'domain',  'target-domain');
+addParameter(p, 'variant', '');
 parse(p, varargin{:});
 o = p.Results;
 for k = 1:numel(o.layers)
-    id = sprintf('cwl_N2_target-domain_DeepRNN_%s', o.layers{k});
+    id = sprintf('cwl_N%d_%s_DeepRNN_%s', o.ncats, o.domain, o.layers{k});
     fprintf('\n===== %s, folds %s =====\n', id, mat2str(folds));
-    runReplication('ids', {id}, 'folds', folds, 'rngType', o.rngType);
+    rr = {'rngType', o.rngType};
+    if ~isempty(o.variant), rr = [rr, {'variant', o.variant}]; end
+    runReplication('ids', {id}, 'folds', folds, rr{:});
 end
 end
