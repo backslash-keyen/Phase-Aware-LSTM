@@ -16,6 +16,9 @@ function v = variantInfo(names, sourceModelRoot)
 %   freezeIntended  path    DeepRNN learn-rate factors 0.1 / 0.2 actually applied
 %   targetDomain2   path    run 'target-domain-2' (F3-F7) through the original
 %                           target-domain options and builders
+%   temporalMasking path    run 'temporalmasking-1' / '-2' (masked Fp1-Fz /
+%                           F3-F7 targets, Table 8) through the original
+%                           target-domain options and builders
 %   authorSource    config  target runs load the authors' source models from
 %                           sourceModelRoot (read-only); source runs are refused
 %   fastPhaseLSTM   path    speed only: the phase-aware projection uses
@@ -90,7 +93,7 @@ for i = 1:numel(pvNames)
         error('replication:unknownVariant', 'Unknown phase-layer version %s (folders in %s).', pvNames{i}, pvDir);
     end
 end
-order = {'authorSource','freezeIntended','targetDomain2','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','charmBase','charm3Conv','charmInstNorm','charmSourceTrained','dualSourceTransfer','c3PaperOptions'};
+order = {'authorSource','freezeIntended','targetDomain2','temporalMasking','fastPhaseLSTM','fastestPhaseLSTM','backwardPhaseLSTM','fusedPhaseLSTM','signedPhaseLSTM','noCarryPhaseLSTM','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','phaseAwareOptions','charmBase','charm3Conv','charmInstNorm','charmSourceTrained','dualSourceTransfer','c3PaperOptions'};
 order = [order, sort(pvNames)];
 unknown = setdiff(names, order);
 if ~isempty(unknown)
@@ -98,8 +101,8 @@ if ~isempty(unknown)
           strjoin(unknown, ', '), strjoin(order, ', '));
 end
 names = order(ismember(order, names));        % canonical order -> stable ids
-if nnz(ismember({'phaseAwareOptions','targetDomain2','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
-    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
+if nnz(ismember({'phaseAwareOptions','targetDomain2','temporalMasking','notrigPhaseLSTM','halfAngMatchedPhaseLSTM','piInputPhaseLSTM','notrigFastPhaseLSTM','ver5FastPhaseLSTM','dualSourceTransfer'}, names)) + numel(pvNames) > 1
+    error('replication:variantConflict', 'phaseAwareOptions, targetDomain2, temporalMasking, dualSourceTransfer and the phase-layer variants with their own options all replace get_trainingOptions; use one.');
 end
 charmVariants = {'charmBase','charm3Conv','charmInstNorm','charmSourceTrained'};
 if nnz(ismember(names, charmVariants)) > 1
@@ -142,6 +145,10 @@ for i = 1:numel(names)
             v.dirs{end+1} = fullfile(repDir, 'variants', 'targetDomain2');
             v.extraDomains{end+1} = 'target-domain-2';
             tests{end+1} = @(k) strcmpi(k.domain, 'target-domain-2'); %#ok<AGROW>
+        case 'temporalMasking'
+            v.dirs{end+1} = fullfile(repDir, 'variants', 'temporalMasking');
+            v.extraDomains = [v.extraDomains, {'temporalmasking-1','temporalmasking-2'}];
+            tests{end+1} = @(k) startsWith(lower(k.domain), 'temporalmasking'); %#ok<AGROW>
         case 'authorSource'
             v.sourceModelRoot = char(sourceModelRoot);
             % every target run loads a pretrained source model

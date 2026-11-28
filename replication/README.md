@@ -86,7 +86,7 @@ Domains are the ones `perfold_dataset.m` already knows. Data folders are relativ
 | 5 F3–F7 multi-category | No-TL, channel selection, net × projections | CWL N3, `target-domain-2` (not runnable) | accuracy |
 | 6 Phase-aware baselines, binary | net × {Phased-LSTM, Complex-LSTM, Phase-Aware-LSTM}; both layouts | layer `phase-lstm` | accuracy |
 | 7 Phase-aware, Fp1–Fz multi-category | net × the same three | CWL N3, `target-domain`, `phase-lstm` | accuracy |
-| 8 Temporal masking | DeepRNN × {Baseline, FFNN, LSTM, GRU, phase-LSTM}; both masks | CWL N2, `temporalmasking-1/2` (not runnable) | accuracy |
+| 8 Temporal masking | DeepRNN × {Baseline, FFNN, LSTM, GRU, phase-LSTM}; both masks | CWL N2, `temporalmasking-1/2` (variant `temporalMasking`; masked folds supplied separately) | accuracy |
 | 9 Phase parametrization | atan, atan2-a, atan2-b, tan-half-angle, numeric-sin-cos | tan-half-angle = released `phase-lstm`, CWL N2, `target-domain` | accuracy |
 | 10 Complexity | {DeepRNN, EEGNet} × {FFNN, LSTM, GRU, complexLSTM, phaseLSTM} | CWL N2, `target-domain` | params, FLOPs, disk size, train time, inference time and memory, measured from the trained networks |
 
@@ -130,6 +130,19 @@ runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN'
 runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'lstm'})
 runAll('variant','targetDomain2','datasets','CWL','ncats',2,'typeNets','DeepRNN','domains','target-domain-2','layerNames',{'gru'})
 ```
+
+### The opt-in `temporalMasking` variant (Table 8)
+
+`perfold_dataset.m` and `retrievePretrainedNet.m` already handle `temporalmasking-1` (Fp1–Fz, data in `temporalMasking_Fp1_Fz/`) and `temporalmasking-2` (F3–F7, `temporalMasking_F3_F7/`), but the original `get_trainingOptions.m` and `define_layerArchitecture.m` reject them. With `'variant', 'temporalMasking'`, `replication/variants/temporalMasking/` shadows those two functions for those runs only, in the same way as `targetDomain2`. They rename the domain to `target-domain` and call the **original** functions, so the options and networks are the ones the unmasked target runs use. Results are labelled `<id>__temporalMasking`.
+
+The masked folds are not built by this repository (`perFold_data_nec21_temporalMasking.m` calls functions that are not in it). Copy them into `datasets/folds/CWL/NEC21_C2/temporalMasking_Fp1_Fz/` and `.../temporalMasking_F3_F7/` (`target_fold<i>.mat`, variables `xtrain/xval/xtest` as channels × time × trials and `ytrain/yval/ytest`). The authors' masked folds (`Datasets\NEC_21\temporalMasking_*` in their backup) are the `targetdomain1/` and `targetdomain2/` folds of `NEC21_C2` with the same trials, labels and order in every split; in each fold about 10% of the samples are set to zero and every other sample is identical.
+
+```matlab
+% Table 8, masked Fp1-Fz: baseline (no transfer) and the three projections
+runReplication('ids',{'cwl_N2_temporalmasking-1_DeepRNN_deeprnn','cwl_N2_temporalmasking-1_DeepRNN_ffnn'},'variant','temporalMasking')
+```
+
+The phase-LSTM row needs a phase-layer variant, and those replace `get_trainingOptions` as well, so it cannot be combined with `temporalMasking` yet.
 
 ### The opt-in `authorSource` variant (the authors' source models)
 
