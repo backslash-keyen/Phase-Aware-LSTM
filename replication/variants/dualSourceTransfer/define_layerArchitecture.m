@@ -20,7 +20,9 @@ elseif strcmpi(config.layerName, 'baseTransfer')
     assert(isfield(model, 'pretrainedNet') && ~isempty(model.pretrainedNet), ...
         'dualSourceTransfer:noSource', 'baseTransfer needs the dual-channel source net (sourceDomain2Classifier_*).');
     layers = model.pretrainedNet.Layers;
-    assert(isequal(layers(1).InputSize, model.nchans), 'dualSourceTransfer:channels', ...
+    % sequence input (DeepRNN, transformer): InputSize = nchans; image input
+    % (EEGNet): InputSize = [nchans T 1], channels first
+    assert(layers(1).InputSize(1) == model.nchans, 'dualSourceTransfer:channels', ...
         'The dual-channel source net takes %s channels; the target data has %d.', mat2str(layers(1).InputSize), model.nchans);
     fprintf('[dualSourceTransfer] fine-tuning the dual-channel source net (%d layers) on the target\n', numel(layers));
 else
