@@ -67,7 +67,7 @@ so the same table over folds 1-5 is given too.
 
 ## Reading the tables
 
-- Every projection row is within 0.6 points of the HPC 10-fold test mean in every branch and pass,
+- Every projection cell is within 0.9 points of the HPC 10-fold test mean (most within 0.5),
   except the two cells with one collapsed fold.
 - The projections, no transfer and dual-channel transfer all land at 42-43 % test. The 3-class
   target task barely separates them: the spread between rows is smaller than the fold-to-fold SD.
